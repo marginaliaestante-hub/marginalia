@@ -2171,22 +2171,35 @@ async function say(text){
   micPause();
   try { await sayRaw(text); } finally { micResume(); }
 }
+// Tempo estimado de fala (ms): serve só de rede de segurança, nunca para cortar a Maggie no meio
+const speakMs = t => 4000 + String(t).length * 110;
 function sayRaw(text){
   return new Promise(async res => {
-    vcMsg(text);
+    vcMsg(text, speakMs(text) + 6000);
     stopSpeech();
     V.speaking = true;
     const blob = await maggieAudio(text);
     if (blob && await playBlob(blob)){ V.speaking = false; res(); return; }
     if (!syn){ V.speaking = false; res(); return; }
-    const ut = new SpeechSynthesisUtterance(text); const v = assistantVoice();
-    if (v){ ut.voice = v; ut.lang = v.lang; } else ut.lang = 'pt-BR';
-    ut.rate = 1.05; let done = false; const fin = () => { if (!done){ done = true; V.speaking = false; res(); } };
-    ut.onend = fin; ut.onerror = fin; setTimeout(fin, 15000);
-    syn.speak(ut);
+    // Voz do navegador: frase por frase (o Chrome corta falas longas no meio)
+    const parts = (String(text).match(/[^.!?…]+[.!?…]*["”»]?\s*/g) || [String(text)]).map(x => x.trim()).filter(Boolean);
+    const v = assistantVoice(); let i = 0, done = false;
+    const fin = () => { if (!done){ done = true; V.speaking = false; res(); } };
+    const next = () => {
+      if (done) return;
+      if (i >= parts.length) return fin();
+      const ut = new SpeechSynthesisUtterance(parts[i++]);
+      if (v){ ut.voice = v; ut.lang = v.lang; } else ut.lang = 'pt-BR';
+      ut.rate = 1.05;
+      let ended = false; const guard = setTimeout(() => { if (!ended){ ended = true; next(); } }, speakMs(ut.text) + 4000);
+      ut.onend = () => { if (ended) return; ended = true; clearTimeout(guard); next(); };
+      ut.onerror = ev => { if (ended) return; ended = true; clearTimeout(guard); if (ev.error === 'interrupted' || ev.error === 'canceled') fin(); else next(); };
+      syn.speak(ut);
+    };
+    next();
   });
 }
-function vcMsg(t){ const s = $('#ab-status'); s.textContent = t; s.classList.remove('busy'); clearTimeout(V.msgT); V.msgT = setTimeout(() => paintAb(), 6000); }
+function vcMsg(t, ms){ const s = $('#ab-status'); s.textContent = t; s.classList.remove('busy'); clearTimeout(V.msgT); V.msgT = setTimeout(() => paintAb(), Math.max(6000, ms || 0)); }
 
 function holdForCommand(){
   if (V.hold) return;
@@ -2936,7 +2949,7 @@ Responda só com JSON:
 
 /* ---- "da última vez" ---- */
 function welcomeBack(){
-  if (!compOn() || C.greeted || !C.doc) return null;
+  if (!(compOn() || (C.doc?.reading && A.sample)) || C.greeted || !C.doc) return null;
   C.greeted = true;
   const away = Date.now() - (C.prevHeard || 0);
   const where = C.doc.ondeParamos || (C.doc.recap || '').split(/(?<=[.!?])\s/).slice(-2).join(' ');
@@ -3032,6 +3045,7 @@ function readTurn(kind, prev, n){
   const now = Date.now(), dt = Math.min(120, (now - R.pageAt) / 1000); R.pageAt = now;
   if (!(n > prev && n - prev <= 2)) return;           // só virada de página para frente (não saltos no índice)
   R.secs += dt;
+  if (C.doc?.reading){ C.doc.lastHeard = now; if (R.secs > 30) compSave(); }
   if (!readOn() || C.inflight || C.awaiting) return;
   const to = lastReadBefore(kind, n); if (to < 0) return;
   if (!C.readMax || to > C.readMax.pi) C.readMax = { pi:to, b:S.paras[to].t.length };
@@ -3053,6 +3067,8 @@ async function readingInit(id){
     if (!A.chapters.length || A.bookId !== id){ A.bookId = id; buildChapters(); A.units = []; A.comp.from = null; await loadMeta(); await compLoad(); }
     R.pageAt = Date.now(); R.secs = 0;
     paintReadBtn();
+    // "Da última vez…" ao voltar ao livro com a Maggie do modo leitura ligada
+    if (C.doc?.reading && !A.on){ const wb = welcomeBack(); if (wb){ showReadBar(); await say(wb); if (!C.awaiting && !V.pending) hideReadBar(); } }
   } catch (e) { console.warn('[marginalia] modo leitura', e); }
 }
 $('#r-maggie').onclick = async e => {
