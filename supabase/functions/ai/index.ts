@@ -89,8 +89,11 @@ function parseJSON(text: string) {
   throw new Error('json_parse');
 }
 
-// Modelos que recusaram o ajuste de "raciocínio" (não mandamos de novo)
+// Modelos que recusaram o ajuste de "raciocínio" ou de filtros (não mandamos de novo)
 const noThinkCfg = new Set<string>();
+const noSafety = new Set<string>();
+// Livros têm violência, palavrão e cenas fortes: os filtros padrão bloqueiam trechos de romance comuns.
+const SAFETY_CATS = ['HARM_CATEGORY_HARASSMENT', 'HARM_CATEGORY_HATE_SPEECH', 'HARM_CATEGORY_SEXUALLY_EXPLICIT', 'HARM_CATEGORY_DANGEROUS_CONTENT'];
 
 async function callModel(key: string, model: string, prompt: string, timeoutMs = 40_000): Promise<{ status: number; error?: string; text?: string }> {
   const isGemma = model.startsWith('gemma');
@@ -102,6 +105,8 @@ async function callModel(key: string, model: string, prompt: string, timeoutMs =
   // Raciocínio curto: respostas rápidas para a leitura não ficar esperando
   const thinkCfg = !isGemma && !noThinkCfg.has(model) && ver(model) >= 3;
   if (thinkCfg) body.generationConfig.thinkingConfig = { thinkingLevel: 'low' };
+  const safety = !isGemma && !noSafety.has(model);
+  if (safety) body.safetySettings = SAFETY_CATS.map(category => ({ category, threshold: 'BLOCK_NONE' }));
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), timeoutMs);
   let r: Response;
@@ -123,10 +128,17 @@ async function callModel(key: string, model: string, prompt: string, timeoutMs =
     noThinkCfg.add(model);
     return callModel(key, model, prompt, timeoutMs);
   }
+  if (!r.ok && r.status === 400 && safety && /safety|harm|threshold/i.test(j?.error?.message || '')) {
+    noSafety.add(model);
+    return callModel(key, model, prompt, timeoutMs);
+  }
   if (!r.ok) return { status: r.status, error: j?.error?.message || 'erro' };
   const parts = j?.candidates?.[0]?.content?.parts || [];
   const text = parts.filter((p: any) => !p.thought).map((p: any) => p.text || '').join('');
-  if (!text) return { status: 502, error: 'resposta vazia (' + (j?.candidates?.[0]?.finishReason || j?.promptFeedback?.blockReason || '?') + ')' };
+  if (!text) {
+    const why = j?.promptFeedback?.blockReason || j?.candidates?.[0]?.finishReason || '?';
+    return { status: /SAFETY|PROHIBITED|BLOCK|OTHER/i.test(why) ? 451 : 502, error: 'resposta vazia (' + why + ')' };
+  }
   return { status: 200, text };
 }
 
@@ -148,7 +160,8 @@ Deno.serve(async (req) => {
   if (!prompt || prompt.length > 200_000) return json(req, { ok: false, code: 'bad_request' }, 400);
   const tier: 'quick' | 'default' | 'deep' = input?.tier === 'deep' ? 'deep' : input?.tier === 'default' ? 'default' : 'quick';
 
-  let lastErr = '', sawLimit = false;
+  let lastErr = '', sawLimit = false, blocked = false;
+  const tried: string[] = [];
   for (const model of ch[tier]) {
     const until = cooldown.get(model);
     if (until && until > Date.now()) { sawLimit = true; continue; }
@@ -159,6 +172,9 @@ Deno.serve(async (req) => {
         catch { lastErr = 'json_parse'; continue; } // tenta de novo uma vez
       }
       lastErr = `${model}: ${res.status} ${res.error}`;
+      tried.push(`${model}: ${res.status} ${String(res.error).slice(0, 160)}`);
+      console.warn('[ai]', tier, lastErr.slice(0, 300));
+      if (res.status === 451) { blocked = true; break; } // trecho bloqueado pelo filtro do Google: tenta outro modelo
       if (res.status === 429) {
         sawLimit = true;
         // limite por minuto: espera pouco; limite diário: deixa o modelo de lado por 1h
@@ -170,5 +186,6 @@ Deno.serve(async (req) => {
     }
   }
   console.error('[ai] falhou:', lastErr);
-  return json(req, { ok: false, code: sawLimit ? 'rate_limited' : 'ai_error', error: lastErr }, sawLimit ? 429 : 502);
+  const code = blocked && !tried.some(t => !/: 451 /.test(t) && !/: 429 /.test(t)) ? 'blocked' : sawLimit ? 'rate_limited' : 'ai_error';
+  return json(req, { ok: false, code, error: lastErr, tried }, code === 'rate_limited' ? 429 : 502);
 });
