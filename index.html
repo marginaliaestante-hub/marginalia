@@ -3045,7 +3045,7 @@ function readTurn(kind, prev, n){
   const now = Date.now(), dt = Math.min(120, (now - R.pageAt) / 1000); R.pageAt = now;
   if (!(n > prev && n - prev <= 2)) return;           // só virada de página para frente (não saltos no índice)
   R.secs += dt;
-  if (C.doc?.reading){ C.doc.lastHeard = now; if (R.secs > 30) compSave(); }
+  if (C.doc && (C.doc.reading || A.meta?.companion)){ C.doc.lastHeard = now; if (R.secs > 30) compSave(); }
   if (!readOn() || C.inflight || C.awaiting) return;
   const to = lastReadBefore(kind, n); if (to < 0) return;
   if (!C.readMax || to > C.readMax.pi) C.readMax = { pi:to, b:S.paras[to].t.length };
@@ -3067,8 +3067,9 @@ async function readingInit(id){
     if (!A.chapters.length || A.bookId !== id){ A.bookId = id; buildChapters(); A.units = []; A.comp.from = null; await loadMeta(); await compLoad(); }
     R.pageAt = Date.now(); R.secs = 0;
     paintReadBtn();
-    // "Da última vez…" ao voltar ao livro com a Maggie do modo leitura ligada
-    if (C.doc?.reading && !A.on){ const wb = welcomeBack(); if (wb){ showReadBar(); await say(wb); if (!C.awaiting && !V.pending) hideReadBar(); } }
+    // "Da última vez…" ao voltar ao livro
+    // vale com a Maggie ligada em qualquer modo (leitura ou audiobook); não repete ao dar play depois
+    if (!A.on){ const wb = welcomeBack(); if (wb){ showReadBar(); await say(wb); if (!C.awaiting && !V.pending) hideReadBar(); } }
   } catch (e) { console.warn('[marginalia] modo leitura', e); }
 }
 $('#r-maggie').onclick = async e => {
