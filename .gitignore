@@ -1,0 +1,4 @@
+token-github.txt
+*token*.txt
+*.secret
+.env
