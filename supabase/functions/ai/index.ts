@@ -1,0 +1,150 @@
+// Marginália — intermediário de IA
+// Só atende usuárias logadas. Guarda a chave do Gemini escondida e devolve JSON.
+// Corpo: { prompt: string, tier: 'quick' | 'default' }  ->  { ok: true, data, model }
+// GET ?info=1 -> modelos escolhidos (para diagnóstico)
+
+const ALLOWED_ORIGINS = [
+  'https://marginaliaestante-hub.github.io',
+  'http://localhost:8080',
+  'http://127.0.0.1:8080',
+];
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
+const SUPABASE_ANON = Deno.env.get('SUPABASE_ANON_KEY') || '';
+const PUBLISHABLE = 'sb_publishable_kY8g53_gMXbwq3nIoeNH5g_c9Bp6CEe'; // pública por natureza
+const GEMINI = 'https://generativelanguage.googleapis.com/v1beta';
+
+function geminiKey(): string | null {
+  for (const n of ['GEMINI_API_KEY', 'GEMINI_KEY', 'GOOGLE_API_KEY']) {
+    const v = Deno.env.get(n); if (v) return v.trim();
+  }
+  const env = Deno.env.toObject();
+  for (const [k, v] of Object.entries(env)) if (/gemini/i.test(k) && v) return v.trim();
+  return null;
+}
+
+function cors(req: Request) {
+  const o = req.headers.get('Origin') || '';
+  return {
+    'Access-Control-Allow-Origin': ALLOWED_ORIGINS.includes(o) ? o : ALLOWED_ORIGINS[0],
+    'Access-Control-Allow-Headers': 'authorization, apikey, content-type, x-client-info',
+    'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
+    'Vary': 'Origin',
+  };
+}
+const json = (req: Request, body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers: { ...cors(req), 'Content-Type': 'application/json' } });
+
+async function userFrom(req: Request) {
+  const auth = req.headers.get('Authorization') || '';
+  if (!auth.startsWith('Bearer ')) return null;
+  for (const apikey of [PUBLISHABLE, SUPABASE_ANON].filter(Boolean)) {
+    const r = await fetch(`${SUPABASE_URL}/auth/v1/user`, { headers: { Authorization: auth, apikey } });
+    if (r.ok) { const u = await r.json(); if (u && u.id) return u; }
+    if (r.status === 401 || r.status === 403) { const t = await r.text(); if (/invalid api key|no api key/i.test(t)) continue; return null; }
+  }
+  return null;
+}
+
+// ---------- escolha de modelos (descoberta automática, guardada por algumas horas) ----------
+type Chains = { quick: string[]; default: string[]; at: number };
+let chains: Chains | null = null;
+const ver = (name: string) => {
+  const m = name.match(/(\d+(?:\.\d+)?)/); return m ? parseFloat(m[1]) : 0;
+};
+async function getChains(key: string): Promise<Chains> {
+  if (chains && Date.now() - chains.at < 6 * 3600e3) return chains;
+  let names: string[] = [];
+  try {
+    const r = await fetch(`${GEMINI}/models?pageSize=1000`, { headers: { 'x-goog-api-key': key } });
+    const j = await r.json();
+    names = (j.models || [])
+      .filter((m: any) => (m.supportedGenerationMethods || []).includes('generateContent'))
+      .map((m: any) => String(m.name).replace(/^models\//, ''));
+  } catch { /* usa a lista padrão abaixo */ }
+  const stable = (n: string) => !/preview|exp|tts|image|audio|live|thinking|native|computer|robotics/i.test(n);
+  const pick = (re: RegExp) => names.filter(n => re.test(n) && stable(n)).sort((a, b) => ver(b) - ver(a));
+  const flash = pick(/^gemini-\d+(\.\d+)?-flash$/);
+  const lite = pick(/^gemini-\d+(\.\d+)?-flash-lite$/);
+  const gemma = names.filter(n => /^gemma-\d/.test(n) && /-it$/.test(n))
+    .sort((a, b) => ver(b) - ver(a) || (parseInt(b.match(/(\d+)b/)?.[1] || '0') - parseInt(a.match(/(\d+)b/)?.[1] || '0')));
+  const fallbackLite = ['gemini-2.5-flash-lite'];
+  const L = lite.length ? lite.slice(0, 2) : fallbackLite;
+  const F = flash.length ? flash.slice(0, 2) : ['gemini-2.5-flash'];
+  const G = gemma.slice(0, 1);
+  chains = { quick: [...L, ...G, ...F.slice(0, 1)], default: [...F, ...L, ...G], at: Date.now() };
+  return chains;
+}
+
+// Modelos que estouraram a cota recentemente (evita tentar de novo a cada pedido)
+const cooldown = new Map<string, number>();
+
+function parseJSON(text: string) {
+  let t = text.trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
+  try { return JSON.parse(t); } catch { /* tenta recortar */ }
+  const a = t.indexOf('{'), b = t.lastIndexOf('}');
+  if (a >= 0 && b > a) return JSON.parse(t.slice(a, b + 1));
+  throw new Error('json_parse');
+}
+
+async function callModel(key: string, model: string, prompt: string) {
+  const isGemma = model.startsWith('gemma');
+  const body: any = {
+    contents: [{ role: 'user', parts: [{ text: isGemma ? prompt + '\n\nResponda apenas com o JSON, sem texto antes ou depois.' : prompt }] }],
+    generationConfig: { temperature: 0.7, maxOutputTokens: 8192 },
+  };
+  if (!isGemma) body.generationConfig.responseMimeType = 'application/json';
+  const r = await fetch(`${GEMINI}/models/${model}:generateContent`, {
+    method: 'POST',
+    headers: { 'x-goog-api-key': key, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) return { status: r.status, error: j?.error?.message || 'erro' };
+  const parts = j?.candidates?.[0]?.content?.parts || [];
+  const text = parts.filter((p: any) => !p.thought).map((p: any) => p.text || '').join('');
+  if (!text) return { status: 502, error: 'resposta vazia (' + (j?.candidates?.[0]?.finishReason || j?.promptFeedback?.blockReason || '?') + ')' };
+  return { status: 200, text };
+}
+
+Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: cors(req) });
+
+  const user = await userFrom(req);
+  if (!user) return json(req, { ok: false, code: 'not_granted', error: 'faça login' }, 401);
+
+  const key = geminiKey();
+  if (!key) return json(req, { ok: false, code: 'sampling_disabled', error: 'chave do Gemini não configurada' }, 500);
+
+  const ch = await getChains(key);
+  if (req.method === 'GET') return json(req, { ok: true, chains: ch, cooling: [...cooldown.keys()] });
+
+  let input: any;
+  try { input = await req.json(); } catch { return json(req, { ok: false, code: 'bad_request' }, 400); }
+  const prompt = String(input?.prompt || '');
+  if (!prompt || prompt.length > 200_000) return json(req, { ok: false, code: 'bad_request' }, 400);
+  const tier = input?.tier === 'default' ? 'default' : 'quick';
+
+  let lastErr = '', sawLimit = false;
+  for (const model of ch[tier]) {
+    const until = cooldown.get(model);
+    if (until && until > Date.now()) { sawLimit = true; continue; }
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const res = await callModel(key, model, prompt);
+      if (res.status === 200) {
+        try { return json(req, { ok: true, data: parseJSON(res.text!), model }); }
+        catch { lastErr = 'json_parse'; continue; } // tenta de novo uma vez
+      }
+      lastErr = `${model}: ${res.status} ${res.error}`;
+      if (res.status === 429) {
+        sawLimit = true;
+        // limite por minuto: espera pouco; limite diário: deixa o modelo de lado por 1h
+        cooldown.set(model, Date.now() + (/per.?day|daily|PerDay/i.test(res.error || '') ? 3600e3 : 60e3));
+        break;
+      }
+      if (res.status === 404 || res.status === 400 || res.status === 403) break; // modelo indisponível: próximo
+      // 5xx: tenta mais uma vez o mesmo modelo
+    }
+  }
+  console.error('[ai] falhou:', lastErr);
+  return json(req, { ok: false, code: sawLimit ? 'rate_limited' : 'ai_error', error: lastErr }, sawLimit ? 429 : 502);
+});

@@ -295,6 +295,36 @@
     }
   };
 
+  /* ===================== IA (via intermediário no Supabase) ===================== */
+  const sample = {
+    async json(prompt, opts = {}) {
+      const { data } = await sb.auth.getSession();
+      const tok = (data.session || session).access_token;
+      let r;
+      try {
+        r = await fetch(`${CFG.url}/functions/v1/ai`, {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + tok, apikey: CFG.key, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt: String(prompt), tier: opts.modelTier === 'default' ? 'default' : 'quick' }),
+          signal: opts.signal
+        });
+      } catch (e) {
+        if (e && e.name === 'AbortError') throw e;
+        const err = new Error('sem conexão'); err.code = 'network'; throw err;
+      }
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.ok) {
+        const err = new Error(j.error || 'erro da IA');
+        // 'not_granted' faria o site desligar a Maggie de vez; sessão vencida não é motivo para isso
+        err.code = j.code === 'not_granted' ? 'auth' : (j.code || 'ai_error');
+        console.warn('[marginalia] IA:', err.code, err.message);
+        throw err;
+      }
+      if (window.MARGINALIA_DEBUG) console.log('[marginalia] IA respondeu com', j.model);
+      return j.data;
+    }
+  };
+
   /* ===================== window.claude.use ===================== */
   window.claude = {
     async use(name) {
@@ -303,7 +333,7 @@
         case 'db': return db;
         case 'assets': return assets;
         case 'downloads': return downloads;
-        case 'sample': return null;       // IA: entra na fase 3
+        case 'sample': return sample;
         case 'permissions': return null;  // sem permissões a pedir fora do Claude
         default: return null;
       }

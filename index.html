@@ -1628,7 +1628,7 @@ async function speakAt(idx){
       catch (e) {
         A.busy = ''; A.waiting = false;
         if (e?.code === 'not_granted' || e?.code === 'sampling_disabled'){ A.sample = null; A.meta.mode = 'simple'; saveMeta(); toast('Sem permissão para analisar as falas. Tocando com uma voz só.'); }
-        else if (e?.code === 'rate_limited'){ A.playing = false; paintAb(); toast('Limite de uso do Claude atingido. Tente de novo mais tarde.'); return; }
+        else if (e?.code === 'rate_limited'){ A.playing = false; paintAb(); toast('Limite diário da IA atingido. Tente de novo mais tarde.'); return; }
         else { A.blocks[blk.id] = true; toast('Não consegui analisar este trecho. Ele vai na voz do narrador.'); }
       }
       A.busy = ''; A.waiting = false;
@@ -1737,12 +1737,12 @@ function renderStart(){
     <p class="lede">Escolha como este livro vai ser narrado. Dá para mudar depois.</p>
     <div class="modes">
       <button class="mode" data-mode="drama" ${canDrama?'':'disabled'}>
-        <b>Dramatizado</b><span>Um narrador e uma voz para cada personagem. O Claude identifica quem fala e sugere as vozes que combinam.</span>
-        ${canDrama?'':'<em>Disponível só dentro do Claude.</em>'}
+        <b>Dramatizado</b><span>Um narrador e uma voz para cada personagem. A IA identifica quem fala e sugere as vozes que combinam.</span>
+        ${canDrama?'':'<em>Precisa da IA, que não está disponível agora.</em>'}
       </button>
       <button class="mode" data-mode="simple"><b>Simples</b><span>Uma única voz lê o livro inteiro. Começa na hora.</span></button>
     </div>
-    <p class="fine">As vozes são geradas por computador, pelo seu navegador${nat ? ` (${nat} vozes naturais encontradas)` : ''}. No modo dramatizado, o texto de cada trecho é enviado ao Claude, na sua conta, só para identificar quem fala, e isso usa um pouco do seu limite. Nada é enviado a outros serviços.</p>`;
+    <p class="fine">As vozes são geradas por computador, pelo seu navegador${nat ? ` (${nat} vozes naturais encontradas)` : ''}. No modo dramatizado, o texto de cada trecho é enviado à IA (Gemini, do Google) só para identificar quem fala, e isso usa um pouco do limite diário gratuito.</p>`;
 }
 function voiceOptions(sel){
   return A.voices.map(v => `<option value="${esc(v.name)}"${v.name===sel?' selected':''}>${esc(vShort(v.name))}${vNatural(v)?'':' (sintética)'}</option>`).join('');
@@ -1773,7 +1773,7 @@ function renderCast(){
       <button data-setmode="simple" aria-pressed="${!drama}">Simples</button>
     </div>
     ${castRow('narr', m.narrator, true)}
-    ${drama ? (cast.length ? cast.map(([id,c]) => castRow(id, c, false)).join('') : `<p class="fine">Os personagens aparecem aqui conforme o Claude encontra as falas de cada trecho. Dê play para começar.</p>`) : ''}
+    ${drama ? (cast.length ? cast.map(([id,c]) => castRow(id, c, false)).join('') : `<p class="fine">Os personagens aparecem aqui conforme a IA encontra as falas de cada trecho. Dê play para começar.</p>`) : ''}
     ${drama ? `<div class="cacts"><button class="btn-s" id="ab-add">Adicionar personagem</button>${cast.length && A.sample ? '<button class="btn-s" id="ab-resuggest">Sugerir vozes de novo</button>' : ''}</div>` : ''}
     <p class="fine">Vozes geradas por computador. Elas mudam de tom e ritmo, mas não de emoção.</p>`;
 }
@@ -2312,8 +2312,8 @@ Formato de "aposta_resolvida" quando houver: {"id":"b123","resultado":"acertou|e
     if (C.question && !A.playing) C.question = null;
     compSave();
   } catch (e) {
-    if (e?.code === 'not_granted' || e?.code === 'sampling_disabled'){ A.sample = null; toast('A Maggie precisa da permissão para usar o Claude.'); paintAb(); }
-    else if (e?.code === 'rate_limited') toast('Maggie em pausa: limite de uso do Claude atingido.');
+    if (e?.code === 'not_granted' || e?.code === 'sampling_disabled'){ A.sample = null; toast('A Maggie não conseguiu falar com a IA agora.'); paintAb(); }
+    else if (e?.code === 'rate_limited') toast('Maggie em pausa: limite diário da IA atingido.');
     C.doc.lastCheck = { at: Date.now(), pi: to.pi, error: String(e?.code || e) };
     compSave();
   } finally { C.inflight = false; $('#ab-comp').classList.remove('thinking'); }
@@ -2461,7 +2461,7 @@ async function endConversation(how){
 /* ---- she starts the conversation ---- */
 function readLimitPos(){ const L = A.lastFinishedUnit; return L ? { pi:L.pi, b:L.b } : { pi: Math.max(0, S.para), b: 0 }; }
 async function compUserTalk(raw){
-  if (!A.sample){ await say('Para conversar eu preciso do Claude, e ele não está disponível aqui.'); releaseHold(true); return; }
+  if (!A.sample){ await say('Para conversar eu preciso da IA, e ela não está disponível agora.'); releaseHold(true); return; }
   if (!C.doc) await compLoad();
   const q = stripWake(raw) || raw.trim();
   const lim = readLimitPos();
@@ -2519,7 +2519,7 @@ function renderCompMenu(){
 $('#ab-comp').onclick = e => {
   e.stopPropagation();
   if (!A.meta) return;
-  if (!A.sample && !A.meta.companion){ toast('A Maggie só funciona dentro do Claude.'); return; }
+  if (!A.sample && !A.meta.companion){ toast('A Maggie precisa da IA, que não está disponível agora.'); return; }
   cmenu.hidden = !cmenu.hidden; if (!cmenu.hidden) renderCompMenu();
 };
 cmenu.addEventListener('click', async e => {
