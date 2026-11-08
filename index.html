@@ -1462,6 +1462,7 @@ async function loadMeta(){
   A.meta = null; A.blocks = {}; A.labels = {}; A.emo = {}; A.pending = {}; A.planFailAt = 0;
   if (!S.db) return;
   try { const s = await metaRef().get(); if (s.exists) A.meta = JSON.parse(JSON.stringify(s.data())); } catch {}
+  if (A.meta && mergeDupes()) saveMeta();
 }
 function speakerCfg(sp){
   const m = A.meta;
@@ -1479,7 +1480,7 @@ function castBrief(){
   return Object.entries(A.meta.cast || {}).map(([id,c]) => ({ id, nome:c.name, ...(c.aliases?.length ? { apelidos:c.aliases } : {}), genero:c.gender, idade:c.age, ...(c.temper ? { temperamento:c.temper } : {}), ...(c.desc ? { jeito_de_falar:c.desc } : {}) }));
 }
 // Quem narra o capítulo deste parágrafo: id do personagem (1ª pessoa) ou 'narr'
-function narrFor(pi){ const id = A.meta?.plan?.pov?.[chapOf(pi)]; return id && A.meta.cast?.[id] ? id : 'narr'; }
+function narrFor(pi){ const id = canon(A.meta?.plan?.pov?.[chapOf(pi)]); return id && A.meta.cast?.[id] ? id : 'narr'; }
 // Capítulo mais adiantado que a leitora já ouviu (o elenco não mostra quem ainda não apareceu)
 function seenChap(){ return Math.max(A.meta?.maxChap || 0, A.chap || 0); }
 function visibleCast(){
@@ -1487,10 +1488,51 @@ function visibleCast(){
   return Object.entries(A.meta?.cast || {}).filter(([,c]) => c.fixed || (c.firstChap ?? 0) <= s)
     .sort((a,b) => (!!b[1].narrates - !!a[1].narrates));
 }
+const TITLES = /^(detetive|det|sr|sra|srta|dr|dra|senhor|senhora|dona|dom|policial|agente|oficial|xerife|tenente|sargento|capitao|professor|professora|prof|tia|tio|vovo|avo|padre|irma)$/;
+const nameTokens = n => String(n || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9\s]/g,' ').split(/\s+/).filter(t => t && !TITLES.test(t));
+// "Daniel" e "Daniel Clarke", "Evans" e "Detetive Evans" são a mesma pessoa
+function samePerson(a, b){
+  const ta = nameTokens(a), tb = nameTokens(b); if (!ta.length || !tb.length) return false;
+  if (ta.join(' ') === tb.join(' ')) return true;
+  const [sh, lg] = ta.length <= tb.length ? [ta, tb] : [tb, ta];
+  return sh.length === 1 && lg[0] === sh[0] && sh[0].length > 2;
+}
+const canon = id => { let k = 0; while (id && A.meta?.alias?.[id] && k++ < 6) id = A.meta.alias[id]; return id; };
 function findByName(n){
   const s = slugId(n); if (!s) return null;
-  const hit = Object.entries(A.meta.cast || {}).find(([id,c]) => id === s || slugId(c.name) === s || (c.aliases || []).some(x => slugId(x) === s));
+  if (A.meta.alias?.[s]) return canon(s);
+  const cast = Object.entries(A.meta.cast || {});
+  const hit = cast.find(([id,c]) => id === s || slugId(c.name) === s || (c.aliases || []).some(x => slugId(x) === s))
+    || cast.find(([,c]) => samePerson(c.name, n) || (c.aliases || []).some(x => samePerson(x, n)));
   return hit ? hit[0] : null;
+}
+// Junta personagens repetidos (mantém o nome que apareceu primeiro, para não entregar um sobrenome antes da hora)
+function mergeDupes(){
+  const m = A.meta; if (!m?.cast) return false;
+  m.alias = m.alias || {}; let changed = false;
+  const score = c => (c.narrates ? 1000 : 0) + (c.fixed ? 500 : 0) - (c.firstChap ?? 999);
+  let again = true;
+  while (again){
+    again = false;
+    const ids = Object.keys(m.cast);
+    outer: for (let i = 0; i < ids.length; i++) for (let j = i + 1; j < ids.length; j++){
+      const a = m.cast[ids[i]], b = m.cast[ids[j]];
+      if (!a || !b || (a.fixed && b.fixed) || !samePerson(a.name, b.name)) continue;
+      const [keep, drop] = score(a) >= score(b) ? [ids[i], ids[j]] : [ids[j], ids[i]];
+      const K = m.cast[keep], D = m.cast[drop];
+      K.aliases = [...new Set([...(K.aliases || []), D.name, ...(D.aliases || [])])].filter(x => x && x !== K.name).slice(0, 8);
+      K.firstChap = Math.min(K.firstChap ?? 999, D.firstChap ?? 999);
+      if (D.narrates) K.narrates = true;
+      for (const f of ['temper', 'desc']) if (!K[f] && D[f]) K[f] = D[f];
+      if ((!K.gender || /indefinid/.test(K.gender)) && D.gender) K.gender = D.gender;
+      if ((!K.age || /indefinid/.test(K.age)) && D.age) K.age = D.age;
+      delete m.cast[drop]; m.alias[drop] = keep;
+      for (const n in (m.plan?.pov || {})) if (m.plan.pov[n] === drop) m.plan.pov[n] = keep;
+      for (const k in A.labels) if (A.labels[k] === drop) A.labels[k] = keep;
+      changed = again = true; break outer;
+    }
+  }
+  return changed;
 }
 // Acrescenta um personagem (ou completa a ficha de um já conhecido, sem apagar ajustes da leitora)
 function addCast(p, chap){
@@ -1547,6 +1589,8 @@ Tarefa 2: liste os personagens que aparecem nesses trechos, incluindo quem narra
 
 Importante:
 - Use apenas o que está nos trechos. Não use conhecimento prévio sobre o livro, mesmo que o reconheça, e não invente personagens.
+- Liste só personagens da história. Não liste autores, editoras, tradutores nem pessoas citadas em dedicatória, agradecimentos, sumário ou listas de outras obras.
+- Uma pessoa chamada de jeitos diferentes (nome, sobrenome, apelido, "detetive Fulano") é um personagem só: use um id e ponha as outras formas em "apelidos".
 - Não reescreva nem resuma o texto.
 ${known.length ? `- Personagens já conhecidos (reaproveite estes ids): ${JSON.stringify(known)}\n` : ''}
 Capítulos:
@@ -1587,6 +1631,7 @@ Em "capitulos" inclua todos os números listados.`;
     if (/primeira/i.test(plan.tipo) || Object.keys(plan.pov).length) m.narrator.pessoa = 'primeira';
     else if (/terceira/i.test(plan.tipo)) m.narrator.pessoa = 'terceira';
     m.plan = plan;
+    mergeDupes();
     A.busy = '';
     await suggestVoices(false);
   })();
@@ -1681,12 +1726,13 @@ async function ensureBlock(blk){
     const ref = S.db.doc(`audio/${S.cur}/blk/${blk.id}`);
     try {
       const s = await ref.get();
-      if (s.exists){ const d = s.data(); if (d.v >= 2 || d.manual){ Object.assign(A.labels, d.labels || {}); Object.assign(A.emo, d.emo || {}); A.blocks[blk.id] = true; return; } }
+      if (s.exists){ const d = s.data(); if (d.v >= 2 || d.manual){ for (const [key, v] of Object.entries(d.labels || {})) A.labels[key] = canon(v); Object.assign(A.emo, d.emo || {}); A.blocks[blk.id] = true; return; } }
     } catch {}
     if (!rangeLines(blk).k){ A.blocks[blk.id] = true; try { await ref.set({ labels:{}, emo:{}, v:2, at:Date.now() }); } catch {} return; }
     if (!A.sample) throw { code:'not_granted' };
     const chap = chapOf(blk.start);
     const { labels, emo, nulls, added, k, parts } = await analyzeRange(blk, chap);
+    if (added && mergeDupes()) for (const key in labels) labels[key] = canon(labels[key]);
     Object.assign(A.labels, labels); Object.assign(A.emo, emo);
     A.blocks[blk.id] = true;
     try { await ref.set({ labels, emo, v:2, at:Date.now() }); } catch {}
@@ -1842,7 +1888,7 @@ async function speakAt(idx){
   let sp = null;
   if (A.meta.mode === 'drama'){
     if (S.paras[u.pi].h) sp = 'narr';
-    else { sp = u.key ? (A.labels[u.key] ?? null) : null; if (!sp || sp === 'narr') sp = narrFor(u.pi); } // narração em 1ª pessoa: voz de quem narra o capítulo
+    else { sp = u.key ? canon(A.labels[u.key] ?? null) : null; if (!sp || sp === 'narr' || !A.meta.cast?.[sp]) sp = narrFor(u.pi); } // narração em 1ª pessoa: voz de quem narra o capítulo
   }
   const cfg = speakerCfg(sp);
   const fx = A.meta.mode === 'drama' && u.key ? EMO_FX[A.emo[u.key]] : null;
@@ -1893,7 +1939,7 @@ function paintAb(){
   const chip = $('#ab-who');
   chip.hidden = !drama;
   if (drama){
-    const sp = u ? (S.paras[u.pi]?.h ? 'narr' : (u.key && A.labels[u.key] && A.labels[u.key] !== 'narr' ? A.labels[u.key] : narrFor(u.pi))) : null;
+    const sp = u ? (S.paras[u.pi]?.h ? 'narr' : (u.key && A.labels[u.key] && A.labels[u.key] !== 'narr' && A.meta.cast?.[canon(A.labels[u.key])] ? canon(A.labels[u.key]) : narrFor(u.pi))) : null;
     const opts = [['narr','Narrador'], ...visibleCast().map(([id,c]) => [id, c.name])];
     chip.innerHTML = opts.map(([id,n]) => `<option value="${id}">${esc(n)}</option>`).join('');
     chip.value = sp || 'narr';
