@@ -316,6 +316,12 @@ input.cname:focus{outline:none;box-shadow:0 1px 0 var(--accent)}
 .ab.reading .ab-row > :not(.ab-right),.ab.reading #ab-who,.ab.reading #ab-speed,.ab.reading #ab-cast,.ab.reading #ab-comp{display:none}
 .comp-menu.at-top{top:calc(58px + env(safe-area-inset-top,0px));bottom:auto}
 .comp-menu .cm-talk{margin-top:10px;width:100%}
+.mic-btn{position:relative}
+.mic-btn[data-state="wake"],.mic-btn[data-state="starting"]{color:var(--accent)}
+.mic-btn[data-state="command"],.mic-btn[data-state="answer"]{color:var(--paper);background:var(--accent)}
+.mic-btn[data-state="wake"]::after,.mic-btn[data-state="command"]::after,.mic-btn[data-state="answer"]::after{content:"";position:absolute;top:6px;right:6px;width:7px;height:7px;border-radius:50%;background:#d23c5a;animation:pulse 1.2s ease-in-out infinite}
+.mic-btn[data-state="paused"]{opacity:.55}
+.ab.reading #ab-mic{display:inline-flex}
 .comp-menu .lbl{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--rmuted);font-weight:600}
 .cm-opts{display:flex;flex-wrap:wrap;gap:6px}
 .comp-menu .chip{background:transparent;color:var(--pink);border-color:color-mix(in srgb,var(--pink) 18%,transparent)}
@@ -532,6 +538,7 @@ input.cname:focus{outline:none;box-shadow:0 1px 0 var(--accent)}
     <button class="ib" id="r-aa" aria-label="Aparência"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19l5-14 5 14M6 14h6M15 19l3.5-9 3.5 9M16.2 16h4.6"/></svg></button>
     <button class="ib" id="r-audio" aria-label="Ouvir audiobook"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="3" y="14" width="4.5" height="6" rx="1.5"/><rect x="16.5" y="14" width="4.5" height="6" rx="1.5"/></svg></button>
     <button class="ib" id="r-maggie" aria-pressed="false" aria-label="Maggie no modo leitura" title="Maggie no modo leitura" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"><path d="M4 5h16v11H9l-5 4z"/><path d="M8.5 10.5h.01M12 10.5h.01M15.5 10.5h.01"/></svg></button>
+    <button class="ib mic-btn" id="r-mic" aria-pressed="false" aria-label="Ligar o microfone" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
     <button class="ib" id="r-notes" aria-label="Post-its"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 4h16v11l-5 5H4z"/><path d="M15 20v-5h5"/></svg></button>
     <button class="ib" id="r-fs" aria-label="Tela cheia"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
   </div>
@@ -564,6 +571,7 @@ input.cname:focus{outline:none;box-shadow:0 1px 0 var(--accent)}
         <select id="ab-who" class="ab-sel ab-who" aria-label="Quem está falando"></select>
         <button class="ab-speed" id="ab-speed" aria-label="Velocidade">1×</button>
         <button class="ib" id="ab-comp" aria-pressed="false" aria-label="Companhia de leitura" title="Companhia de leitura"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"><path d="M4 5h16v11H9l-5 4z"/><path d="M8.5 10.5h.01M12 10.5h.01M15.5 10.5h.01"/></svg></button>
+        <button class="ib mic-btn" id="ab-mic" aria-pressed="false" aria-label="Ligar o microfone" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
         <button class="ib" id="ab-cast" aria-label="Elenco e vozes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c.8-3.4 3.2-5 6-5s5.2 1.6 6 5"/><circle cx="17" cy="9" r="2.4"/><path d="M16.5 14.2c2.3.2 3.9 1.6 4.5 4.3"/></svg></button>
         <button class="ib" id="ab-close" aria-label="Fechar audiobook"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
       </div>
@@ -2146,7 +2154,11 @@ function playBlob(blob){
     setTimeout(() => fin(true), 90000);
   });
 }
-function say(text){
+async function say(text){
+  micPause();
+  try { await sayRaw(text); } finally { micResume(); }
+}
+function sayRaw(text){
   return new Promise(async res => {
     vcMsg(text);
     stopSpeech();
@@ -3154,6 +3166,77 @@ $('#jn-modal').addEventListener('click', async e => {
 
 function vcReset(){ clearTimeout(V.timer); V.pending = null; V.hold = false; V.wasPlaying = false; vc.value = ''; vcBox.classList.remove('listening'); }
 
+
+
+/* ================= "Ei, Maggie": microfone sem as mãos ================= */
+// Estados: 'wake' (esperando "Ei, Maggie"), 'command' (ouvindo o pedido), 'answer' (resposta à Maggie).
+// Enquanto a Maggie fala, o microfone pausa para não ouvir a si mesmo.
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+const MIC = { on:false, rec:null, state:'off', running:false, backoff:300, cmdUntil:0, restartT:null, cmdT:null, paused:false };
+const WAKE_HEAR = /\b(?:ei|hey|oi|ola|olá)?[,\s]*(?:maggie|magg?ie|mag+i|magui|maguie|magie|meg+ie|meg+i|megui|mégui|meg)\b/i;
+const micWanted = () => MIC.on && !MIC.paused && !rd.hidden && document.visibilityState === 'visible';
+function micMode(){ return (C.awaiting || V.pending) ? 'answer' : (Date.now() < MIC.cmdUntil ? 'command' : 'wake'); }
+function micPaint(){
+  const st = !MIC.on ? 'off' : (MIC.paused || V.speaking) ? 'paused' : MIC.running ? micMode() : 'starting';
+  MIC.state = st;
+  const label = { off:'Ligar o microfone (“Ei, Maggie”)', paused:'Microfone em pausa enquanto a Maggie fala', starting:'Ligando o microfone…', wake:'Ouvindo: diga “Ei, Maggie”', command:'Pode falar', answer:'Ouvindo sua resposta' }[st];
+  for (const b of [$('#r-mic'), $('#ab-mic')]) if (b){ b.hidden = !SR; b.setAttribute('aria-pressed', MIC.on); b.dataset.state = st; b.title = label; b.setAttribute('aria-label', label); }
+  if (MIC.on && !C.awaiting) vc.placeholder = st === 'command' ? 'Pode falar…' : 'Diga “Ei, Maggie” e fale';
+}
+function makeRec(){
+  const r = new SR(); r.lang = 'pt-BR'; r.continuous = true; r.interimResults = true; r.maxAlternatives = 1;
+  r.onstart = () => { MIC.running = true; MIC.backoff = 300; micPaint(); };
+  r.onresult = e => { for (let i = e.resultIndex; i < e.results.length; i++){ const res = e.results[i]; micHeard(res[0].transcript.trim(), res.isFinal); } };
+  r.onerror = e => {
+    if (e.error === 'not-allowed' || e.error === 'service-not-allowed'){ MIC.on = false; micPaint(); toast('Sem permissão para o microfone. Libere o microfone para este site no navegador.'); }
+    else if (e.error === 'network' || e.error === 'audio-capture') MIC.backoff = Math.min(8000, MIC.backoff * 2);
+  };
+  r.onend = () => { MIC.running = false; micPaint(); if (micWanted() && !V.speaking){ clearTimeout(MIC.restartT); MIC.restartT = setTimeout(micStart, MIC.backoff); } };
+  return r;
+}
+function micStart(){
+  if (!SR || !micWanted() || MIC.running || V.speaking) return;
+  MIC.rec = MIC.rec || makeRec();
+  try { MIC.rec.start(); } catch {}
+  micPaint();
+}
+function micStop(){ clearTimeout(MIC.restartT); if (MIC.rec && MIC.running){ try { MIC.rec.abort(); } catch {} } MIC.running = false; micPaint(); }
+function micPause(){ if (MIC.on) micStop(); }
+function micResume(){ if (MIC.on){ clearTimeout(MIC.restartT); MIC.restartT = setTimeout(micStart, 350); } }
+function micHeard(t, final){
+  if (V.speaking || !t || !micWanted()) return;
+  const mode = micMode();
+  if (mode === 'wake'){
+    const m = t.match(WAKE_HEAR); if (!m) return;               // o livro tocando não dispara nada: só a palavra de ativação
+    if (!V.hold) holdForCommand();
+    if (!A.on) showReadBar();
+    const rest = t.slice(m.index + m[0].length).replace(/^[\s,.!?:]+/, '');
+    vc.value = rest;
+    if (final){
+      if (rest.length > 2) micSend(t);
+      else { MIC.cmdUntil = Date.now() + 9000; vcMsg('Pode falar…'); micPaint(); armCmdTimeout(); }
+    }
+    return;
+  }
+  vc.value = t.replace(WAKE_HEAR, '').replace(/^[\s,.!?:]+/, '');
+  if (final && t.length > 1) micSend(t);
+}
+function armCmdTimeout(){
+  clearTimeout(MIC.cmdT);
+  MIC.cmdT = setTimeout(() => { if (micMode() === 'wake' && V.hold && !V.busy && !C.awaiting && !V.pending){ vc.value = ''; releaseHold(true); hideReadBar(); micPaint(); } }, 9500);
+}
+function micSend(t){ MIC.cmdUntil = 0; clearTimeout(MIC.cmdT); vc.value = ''; micPaint(); runCommand(t); }
+function micToggle(){
+  if (!SR){ toast('Este navegador não reconhece voz. Use o Chrome ou o Edge.'); return; }
+  MIC.on = !MIC.on; MIC.paused = false;
+  if (MIC.on){ micStart(); toast('Microfone ligado. Diga “Ei, Maggie” e fale.'); }
+  else { micStop(); vc.placeholder = fine ? 'Win + H e fale com a Maggie' : 'Toque e use o microfone do teclado'; }
+  micPaint();
+}
+$('#r-mic').onclick = e => { e.stopPropagation(); micToggle(); };
+$('#ab-mic').onclick = e => { e.stopPropagation(); micToggle(); };
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') micResume(); else micStop(); });
+micPaint();
 
 })();
 </script>
