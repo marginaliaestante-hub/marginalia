@@ -52,9 +52,13 @@
   #mg-login .err{min-height:18px;margin-top:12px;color:#B3261E;font:13px/1.4 var(--f-body,system-ui)}
   #mg-login .hand{display:block;margin-top:18px;text-align:center;font:16px var(--f-hand,cursive);color:var(--muted,#7B6C80)}`;
 
+  function showLoginStyles() {
+    if (document.getElementById('mg-login-style')) return;
+    const st = document.createElement('style'); st.id = 'mg-login-style'; st.textContent = css; document.head.appendChild(st);
+  }
   function showLogin() {
     if (document.getElementById('mg-login')) return;
-    const st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
+    showLoginStyles();
     const el = document.createElement('div');
     el.id = 'mg-login';
     el.innerHTML = `
@@ -82,6 +86,39 @@
       if (error) err.textContent = /invalid/i.test(error.message) ? 'E-mail ou senha não conferem.' : 'Não consegui entrar agora. Confira a internet e tente de novo.';
     };
     setTimeout(() => el.querySelector('#mg-email').focus(), 50);
+  }
+
+  // Nome da leitora (a Maggie chama você por ele e ele aparece no diário). Perguntado uma vez só.
+  window.marginaliaUserName = () => (session && session.user.user_metadata && session.user.user_metadata.name) || '';
+  function askName() {
+    return new Promise(res => {
+      if (window.marginaliaUserName()) return res();
+      const el = document.createElement('div');
+      el.id = 'mg-login';
+      el.innerHTML = `
+        <form>
+          <h1>Oi<i>!</i></h1>
+          <p>Como a Maggie deve chamar você?</p>
+          <label for="mg-name">Seu nome</label>
+          <input id="mg-name" autocomplete="given-name" maxlength="40" required>
+          <button type="submit">Continuar</button>
+          <div class="err" role="alert"></div>
+        </form>`;
+      document.body.appendChild(el);
+      const form = el.querySelector('form'), btn = el.querySelector('button'), err = el.querySelector('.err');
+      form.onsubmit = async e => {
+        e.preventDefault();
+        const name = el.querySelector('#mg-name').value.trim().slice(0, 40);
+        if (!name) return;
+        btn.disabled = true;
+        const { data, error } = await sb.auth.updateUser({ data: { name } });
+        btn.disabled = false;
+        if (error) { err.textContent = 'Não consegui salvar agora. Tente de novo.'; return; }
+        if (data && data.user) session = { ...session, user: data.user };
+        el.remove(); res();
+      };
+      setTimeout(() => el.querySelector('#mg-name').focus(), 50);
+    });
   }
 
   function addLogoutButton() {
@@ -353,6 +390,8 @@
     session = s;
     document.getElementById('mg-login')?.remove();
     await setupSW();
+    if (!document.getElementById('mg-login-style')) showLoginStyles();
+    await askName();
     startRealtime();
     addLogoutButton();
     resolveReady();

@@ -312,6 +312,10 @@ input.cname:focus{outline:none;box-shadow:0 1px 0 var(--accent)}
 .chip-r:hover{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,var(--paper))}
 .chip-r:last-child{color:var(--rmuted)}
 .comp-menu{position:absolute;right:max(14px,env(safe-area-inset-right,0px));bottom:calc(150px + env(safe-area-inset-bottom,0px));z-index:8;background:var(--paper);color:var(--pink);border:1px solid color-mix(in srgb,var(--pink) 14%,transparent);border-radius:16px;padding:14px;box-shadow:0 18px 40px -12px rgba(0,0,0,.35);width:min(300px,calc(100vw - 28px));display:flex;flex-direction:column;gap:10px}
+.ab.reading .ab-row{display:flex;justify-content:flex-end}
+.ab.reading .ab-row > :not(.ab-right),.ab.reading #ab-who,.ab.reading #ab-speed,.ab.reading #ab-cast,.ab.reading #ab-comp{display:none}
+.comp-menu.at-top{top:calc(58px + env(safe-area-inset-top,0px));bottom:auto}
+.comp-menu .cm-talk{margin-top:10px;width:100%}
 .comp-menu .lbl{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--rmuted);font-weight:600}
 .cm-opts{display:flex;flex-wrap:wrap;gap:6px}
 .comp-menu .chip{background:transparent;color:var(--pink);border-color:color-mix(in srgb,var(--pink) 18%,transparent)}
@@ -527,6 +531,7 @@ input.cname:focus{outline:none;box-shadow:0 1px 0 var(--accent)}
     <div class="ttl" id="r-title"></div>
     <button class="ib" id="r-aa" aria-label="Aparência"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19l5-14 5 14M6 14h6M15 19l3.5-9 3.5 9M16.2 16h4.6"/></svg></button>
     <button class="ib" id="r-audio" aria-label="Ouvir audiobook"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="3" y="14" width="4.5" height="6" rx="1.5"/><rect x="16.5" y="14" width="4.5" height="6" rx="1.5"/></svg></button>
+    <button class="ib" id="r-maggie" aria-pressed="false" aria-label="Maggie no modo leitura" title="Maggie no modo leitura" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"><path d="M4 5h16v11H9l-5 4z"/><path d="M8.5 10.5h.01M12 10.5h.01M15.5 10.5h.01"/></svg></button>
     <button class="ib" id="r-notes" aria-label="Post-its"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 4h16v11l-5 5H4z"/><path d="M15 20v-5h5"/></svg></button>
     <button class="ib" id="r-fs" aria-label="Tela cheia"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
   </div>
@@ -598,7 +603,7 @@ input.cname:focus{outline:none;box-shadow:0 1px 0 var(--accent)}
 
 <script src="vendor/supabase-2.117.3.js"></script>
 <script src="config.js?v=2"></script>
-<script src="marginalia-cloud.js?v=5"></script>
+<script src="marginalia-cloud.js?v=6"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
@@ -1042,6 +1047,7 @@ async function openReader(id, jumpTo, atPara){
   if (jumpTo) setTimeout(()=>jump(jumpTo), 60);
   renderDrawer();
   flashChrome();
+  readingInit(id);
 }
 function msg(t){ const m = $('#r-msg'); m.hidden = !t; m.textContent = t || ''; }
 function closeReader(){
@@ -1131,6 +1137,7 @@ function layout(anchorPara){
 }
 function goPage(n, instant){
   n = Math.max(0, Math.min(S.pages-1, n));
+  const prevPage = S.page;
   S.page = n;
   vp.scrollTo({ left: n * S.stride, behavior: instant || matchMedia('(prefers-reduced-motion:reduce)').matches ? 'auto' : 'smooth' });
   let i = 0; for (let k = 0; k < S.pageOf.length; k++){ if (S.pageOf[k] <= n) i = k; else break; }
@@ -1142,6 +1149,7 @@ function goPage(n, instant){
   $('#r-pct').textContent = pct + '%';
   hidePop();
   persist();
+  if (!instant) readTurn('flow', prevPage, n);
 }
 function persist(now){
   clearTimeout(saveT);
@@ -1192,9 +1200,11 @@ function pdfGo(n){
   box.scrollTop = el.offsetTop - 12; setPdfPage(n);
 }
 function setPdfPage(n){
+  const prevPdf = S.pdfPage;
   S.pdfPage = n; const tot = S.pdf?.numPages || 1;
   $('#r-slider').value = n - 1; $('#r-page').textContent = `pág. ${n} de ${tot}`; $('#r-pct').textContent = Math.round(n/tot*100)+'%';
   persist();
+  readTurn('pdf', prevPdf, n);
 }
 $('#pdfv').addEventListener('scroll', () => {
   if (!S.pdf) return; const box = $('#pdfv'); const mid = box.scrollTop + box.clientHeight/3;
@@ -1483,10 +1493,12 @@ function castBrief(){
 function narrFor(pi){ const id = canon(A.meta?.plan?.pov?.[chapOf(pi)]); return id && A.meta.cast?.[id] ? id : 'narr'; }
 // Capítulo mais adiantado que a leitora já ouviu (o elenco não mostra quem ainda não apareceu)
 function seenChap(){ return Math.max(A.meta?.maxChap || 0, A.chap || 0); }
+// Narra algum capítulo que a leitora já alcançou? (não entrega quem vai narrar mais adiante)
+function narratesSeen(id){ const s = seenChap(); return Object.entries(A.meta?.plan?.pov || {}).some(([n, v]) => canon(v) === id && +n <= s); }
 function visibleCast(){
   const s = seenChap();
   return Object.entries(A.meta?.cast || {}).filter(([,c]) => c.fixed || (c.firstChap ?? 0) <= s)
-    .sort((a,b) => (!!b[1].narrates - !!a[1].narrates));
+    .sort((a,b) => (narratesSeen(b[0]) - narratesSeen(a[0])));
 }
 const TITLES = /^(detetive|det|sr|sra|srta|dr|dra|senhor|senhora|dona|dom|policial|agente|oficial|xerife|tenente|sargento|capitao|professor|professora|prof|tia|tio|vovo|avo|padre|irma)$/;
 const nameTokens = n => String(n || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9\s]/g,' ').split(/\s+/).filter(t => t && !TITLES.test(t));
@@ -1960,6 +1972,7 @@ async function openAudio(){
   showPlayer();
 }
 function showPlayer(){
+  ab.classList.remove('reading');
   ab.hidden = false; rd.classList.add('audio'); A.on = true;
   setTimeout(keepFocus, 120);
   if (S.mode === 'flow') setTimeout(() => layout(S.para), 30);
@@ -1995,8 +2008,8 @@ function voiceOptions(sel){
   return A.voices.map(v => `<option value="${esc(v.name)}"${v.name===sel?' selected':''}>${esc(vShort(v.name))}${vNatural(v)?'':' (sintética)'}</option>`).join('');
 }
 function castRow(id, c, isNarr){
-  const tags = isNarr ? [A.meta?.plan && Object.keys(A.meta.plan.pov || {}).length ? 'títulos e trechos em 3ª pessoa' : (c.pessoa === 'primeira' ? 'narra em 1ª pessoa' : c.pessoa === 'terceira' ? 'narra em 3ª pessoa' : '')].filter(Boolean) : [c.narrates ? 'narra capítulos' : '', c.gender, c.age].filter(x => x && !/indefinid/.test(x));
-  const about = isNarr ? '' : [c.temper, c.desc].filter(Boolean).join(' · ');
+  const tags = isNarr ? [A.meta?.plan && Object.keys(A.meta.plan.pov || {}).length ? 'títulos e trechos em 3ª pessoa' : (c.pessoa === 'primeira' ? 'narra em 1ª pessoa' : c.pessoa === 'terceira' ? 'narra em 3ª pessoa' : '')].filter(Boolean) : [narratesSeen(id) ? 'narra capítulos' : '', c.gender, c.age].filter(x => x && !/indefinid/.test(x));
+  const about = isNarr ? '' : [c.temper, c.desc].filter(x => x && !/^indefinid/i.test(x)).join(' · ');
   return `<div class="crow" data-id="${id}">
     <div class="chead">
       ${isNarr ? '<b class="cname">Narrador</b>' : `<input class="cname" data-f="name" value="${esc(c.name)}" aria-label="Nome do personagem">`}
@@ -2070,7 +2083,7 @@ $('#r-audio').onclick = () => { if (A.on) { ab.hidden ? showPlayer() : null; } o
 $('#ab-play').onclick = () => A.playing ? pause() : play();
 $('#ab-back').onclick = () => step(-1);
 $('#ab-fwd').onclick = () => step(1);
-$('#ab-close').onclick = closeAudio;
+$('#ab-close').onclick = () => { if (ab.classList.contains('reading')){ if (C.awaiting) endConversation('skip'); else { releaseHold(false); hideReadBar(); } } else closeAudio(); };
 $('#ab-cast').onclick = () => openSheet('cast');
 $('#ab-chap').onchange = e => goChapter(+e.target.value);
 const SPEEDS = [0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2];
@@ -2130,7 +2143,7 @@ function holdForCommand(){
 }
 function releaseHold(resume){
   V.hold = false; vcBox.classList.remove('listening');
-  if (resume && V.wasPlaying) play();
+  if (resume && V.wasPlaying && A.on) play();
   V.wasPlaying = false;
 }
 
@@ -2459,6 +2472,8 @@ const NO_SPOILER = `Regras inegociáveis:
 - Nunca antecipe acontecimentos, nunca confirme nem negue teorias, nunca sugira suspeitos ou pistas.
 - Não diga "preste atenção nisso", "você vai descobrir" ou "isso será importante".`;
 const clean = (x, n) => typeof x === 'string' ? x.trim().slice(0, n) : '';
+const userName = () => (window.marginaliaUserName && window.marginaliaUserName()) || '';
+const nameLine = () => userName() ? `\nO nome da leitora é ${userName()}.` : '';
 const cleanOpts = o => Array.isArray(o) ? o.map(x => clean(x, 40)).filter(Boolean).slice(0, 3) : [];
 function quoteIn(q, text){ q = clean(q, 220).replace(/^["“'‘]|["”'’]$/g, ''); return q.length > 8 && text.includes(q) ? q : ''; }
 
@@ -2504,7 +2519,11 @@ Inclua até 15 personagens que já apareceram. Em "relacoes", a chave é o que a
 async function compCheck(u){
   const L = A.lastFinishedUnit;
   if (!L || L.pi !== u.pi || L.b !== u.b) return;              // context ends at the last finished sentence
-  const to = { pi:u.pi, b:u.b }, from = C.from;
+  return compCheckAt({ pi:u.pi, b:u.b }, 'audio');
+}
+async function compCheckAt(to, src){
+  const u = { pi: to.pi, b: to.b }, from = C.from, reading = src === 'leitura';
+  if (!from) return;
   if (from.pi > to.pi || (from.pi === to.pi && from.b >= to.b)){ C.from = { pi: Math.max(A.chapters[chapOf(u.pi)].start, u.pi - 12), b:0 }; return; }
   const text = passage(from, to, 8000);
   if (text.length < 400) return;
@@ -2514,8 +2533,8 @@ async function compCheck(u){
     await compBootstrap({ pi: from.pi, b: from.b });
     const recent = (C.doc.recent || []).slice(-4).map(x => `- ${x.q} → ela: ${x.a || '(pulou)'}`).join('\n');
     const bets = (C.doc.bets || []).filter(b => b.status === 'aberta').slice(-6).map(b => `- [${b.id}] Você perguntou: "${b.q}" Ela apostou: "${b.a}"`).join('\n');
-    const prompt = `${PERSONA}
-Ela está ouvindo o audiobook. De tempos em tempos você pode pausar para conversar, mas só quando valer a pena.
+    const prompt = `${PERSONA}${nameLine()}
+${reading ? 'Ela está lendo o livro em silêncio, virando as páginas. De tempos em tempos você pode puxar conversa, mas só quando valer a pena.' : 'Ela está ouvindo o audiobook. De tempos em tempos você pode pausar para conversar, mas só quando valer a pena.'}
 
 ${NO_SPOILER}
 
@@ -2530,7 +2549,7 @@ Apostas dela ainda em aberto:
 ${bets || '(nenhuma)'}
 Vontade dela de conversar agora: ${mood()}.
 
-Trecho que ela acabou de ouvir:
+Trecho que ela acabou de ${reading ? 'ler' : 'ouvir'}:
 """
 ${text}
 """
@@ -2561,7 +2580,10 @@ Formato de "aposta_resolvida" quando houver: {"id":"b123","resultado":"acertou|e
     } else if (r?.interromper && clean(r.pergunta, 240)){
       C.question = { kind: r.tipo === 'aposta' ? 'aposta' : 'pergunta', reacao: clean(r.reacao, 140), q: clean(r.pergunta, 240), opcoes: cleanOpts(r.opcoes), pi: to.pi, b: to.b, passage: text.slice(-3500) };
     }
-    if (C.question && !A.playing) C.question = null;
+    if (reading){
+      const q = C.question; C.question = null;
+      if (q && readOn() && !C.awaiting) setTimeout(() => askCompanion(q), 0);
+    } else if (C.question && !A.playing) C.question = null;
     compSave();
   } catch (e) {
     if (e?.code === 'not_granted' || e?.code === 'sampling_disabled'){ A.sample = null; toast('A Maggie não conseguiu falar com a IA agora.'); paintAb(); }
@@ -2619,6 +2641,7 @@ function waitAnswer(text, opts){
   showChips(opts); keepFocus(); armAnswerTimer();
 }
 async function askCompanion(q){
+  if (!A.on) showReadBar();
   holdForCompanion(); V.wasPlaying = true;
   C.awaiting = { ...q, turns:[], current:q.q };
   C.doc.stats.asked++;
@@ -2647,7 +2670,7 @@ async function compAnswer(raw){
   const lim = { pi: aw.pi, b: aw.b };
   const ment = mentions(ans, lim);
   const ctxBet = aw.kind === 'retorno' ? `\nVocê acabou de lembrar uma aposta dela. Pergunta da aposta: "${aw.betQ}". Ela tinha apostado: "${aw.betA}". Resultado no texto: ${aw.result}.` : '';
-  const prompt = `${PERSONA}
+  const prompt = `${PERSONA}${nameLine()}
 Vocês estão numa pausa rápida da história. Depois da sua resposta, a leitura continua na hora.
 
 ${NO_SPOILER}
@@ -2707,7 +2730,7 @@ async function endConversation(how){
     }
   }
   if (how === 'skip') await say('Tá bom, bora continuar.');
-  setTimeout(() => { if (!C.awaiting && V.hold) releaseHold(true); }, how === 'timeout' ? 0 : 400);
+  setTimeout(() => { if (!C.awaiting && V.hold) releaseHold(true); if (!C.awaiting) hideReadBar(); }, how === 'timeout' ? 0 : 400);
 }
 
 /* ---- she starts the conversation ---- */
@@ -2719,11 +2742,12 @@ async function compUserTalk(raw){
   const lim = readLimitPos();
   const recentText = lim.pi > 0 || lim.b > 0 ? passage({ pi: Math.max(0, lim.pi - 30), b: 0 }, lim, 3500) : '';
   const ment = mentions(q, lim);
+  if (!A.on) showReadBar();
   holdForCompanion();
   vcMsg('Pensando…'); $('#ab-status').classList.add('busy');
   const aw = C.awaiting = { kind:'livre', q, turns:[], current:'', passage: recentText, pi: lim.pi, b: lim.b };
-  const prompt = `${PERSONA}
-A leitora pausou a história para falar com você. Depois da sua resposta, a leitura continua na hora.
+  const prompt = `${PERSONA}${nameLine()}
+A leitora pausou a história para falar com você. Depois da sua resposta, ela volta para o livro.
 
 ${NO_SPOILER}
 
@@ -2732,7 +2756,7 @@ Quem é quem (só com o que já foi lido):
 ${charsBrief()}
 Resumo do que veio antes: ${C.doc.recap || '(sem resumo ainda)'}
 O que ela pensa: ${C.doc.opinions || '(nada ainda)'}
-${ment ? `O que o texto já lido diz sobre quem ela citou:\n"""\n${ment}\n"""\n` : ''}Últimos trechos que ela ouviu:
+${ment ? `O que o texto já lido diz sobre quem ela citou:\n"""\n${ment}\n"""\n` : ''}Últimos trechos que ela leu ou ouviu:
 """
 ${recentText}
 """
@@ -2763,14 +2787,17 @@ function welcomeBack(){
 /* ---- menu ---- */
 const cmenu = $('#comp-menu');
 function renderCompMenu(){
-  const on = !!A.meta?.companion, style = C.doc?.style || 'equilibrada';
-  cmenu.innerHTML = `<div class="lbl">Maggie</div>
+  const read = cmenu.dataset.ctx === 'read';
+  const on = read ? !!C.doc?.reading : !!A.meta?.companion, style = C.doc?.style || 'equilibrada';
+  cmenu.innerHTML = `<div class="lbl">Maggie${read ? ' · modo leitura' : ''}</div>
     <div class="cm-opts">${[['off','Desligada'], ...Object.entries(STYLE_LABEL)].map(([k,l]) => `<button class="chip" data-cm="${k}" aria-pressed="${k==='off' ? !on : on && style===k}">${l}</button>`).join('')}</div>
-    <p class="cm-note">${on ? 'Ela aprende com você: se você pula muito, fala menos; se responde bastante, conversa mais.' : 'Ligue para a Maggie puxar conversa nos momentos marcantes.'}</p>`;
+    <p class="cm-note">${read ? (on ? 'Quando você vira a página num momento marcante, ela puxa conversa. Ela só conhece as páginas que você já terminou.' : 'Ligue para a Maggie conversar com você enquanto lê.') : (on ? 'Ela aprende com você: se você pula muito, fala menos; se responde bastante, conversa mais.' : 'Ligue para a Maggie puxar conversa nos momentos marcantes.')}</p>
+    ${read ? '<button class="chip cm-talk" data-cm="talk">Conversar agora</button>' : ''}`;
 }
 $('#ab-comp').onclick = e => {
   e.stopPropagation();
   if (!A.meta) return;
+  cmenu.dataset.ctx = 'audio'; cmenu.classList.remove('at-top');
   if (!A.sample && !A.meta.companion){ toast('A Maggie precisa da IA, que não está disponível agora.'); return; }
   cmenu.hidden = !cmenu.hidden; if (!cmenu.hidden) renderCompMenu();
 };
@@ -2779,6 +2806,14 @@ cmenu.addEventListener('click', async e => {
   const b = e.target.closest('[data-cm]'); if (!b) return;
   if (!C.doc) await compLoad();
   const k = b.dataset.cm;
+  if (cmenu.dataset.ctx === 'read'){
+    if (k === 'talk'){ cmenu.hidden = true; showReadBar(); holdForCommand(); vc.placeholder = 'Escreva ou dite para a Maggie'; vc.focus(); return; }
+    C.doc.reading = k !== 'off'; if (k !== 'off') C.doc.style = k;
+    R.secs = 0; R.pageAt = Date.now(); compSave(); renderCompMenu(); paintReadBtn();
+    if (k !== 'off' && !C.from) compStartFrom(Math.max(0, lastReadBefore(S.mode === 'flow' ? 'flow' : 'pdf', S.mode === 'flow' ? S.page : S.pdfPage)));
+    setTimeout(() => { cmenu.hidden = true; }, 500);
+    return;
+  }
   if (k === 'off'){ A.meta.companion = false; compReset(); }
   else {
     const was = A.meta.companion; A.meta.companion = true; C.doc.style = k; compSave();
@@ -2787,7 +2822,7 @@ cmenu.addEventListener('click', async e => {
   saveMeta(); renderCompMenu(); paintAb();
   setTimeout(() => { cmenu.hidden = true; }, 500);
 });
-document.addEventListener('click', e => { if (!cmenu.hidden && !e.target.closest('#comp-menu') && !e.target.closest('#ab-comp')) cmenu.hidden = true; });
+document.addEventListener('click', e => { if (!cmenu.hidden && !e.target.closest('#comp-menu') && !e.target.closest('#ab-comp') && !e.target.closest('#r-maggie')) cmenu.hidden = true; });
 
 async function compPermission(){
   try {
@@ -2802,6 +2837,67 @@ function compReset(){
   vc.placeholder = fine ? 'Win + H e fale com a Maggie' : 'Toque e use o microfone do teclado';
   if (C.doc && S.cur) compSave(true);
 }
+
+
+/* ---- Maggie no modo leitura: ela acompanha as páginas viradas ---- */
+// Limite anti-spoiler: só entra o que estava em páginas que a leitora já terminou de ler.
+const R = { secs:0, pageAt:Date.now() };
+function readOn(){ return !!(C.doc?.reading && A.sample && S.paras && A.bookId === S.cur && !A.on && !rd.hidden); }
+function readNatural(pi){
+  if (!S.paras[pi + 1]) return true;
+  if (isBreak(pi + 1)) return true;
+  const c = A.chapters[chapOf(pi)]; if (c && c.end === pi) return true;
+  let talk = 0; for (let k = Math.max(0, pi - 5); k <= pi; k++) if (paraHasSpeech(k)) talk++;
+  return talk >= 3 && !paraHasSpeech(pi + 1) && !paraHasSpeech(pi + 2);
+}
+// Último parágrafo inteiramente lido antes da página `n`
+function lastReadBefore(kind, n){
+  let to = -1;
+  if (kind === 'flow'){
+    for (let pi = 0; pi < S.paras.length; pi++){
+      const st = S.pageOf[pi], nx = S.pageOf[pi + 1];
+      if (st == null || st > n - 1) break;
+      if (nx != null && nx <= n - 1) to = pi;
+    }
+  } else {
+    for (let pi = 0; pi < S.paras.length; pi++){ if ((S.paras[pi].p || 0) <= n - 1) to = pi; else break; }
+  }
+  return to;
+}
+function readTurn(kind, prev, n){
+  const now = Date.now(), dt = Math.min(120, (now - R.pageAt) / 1000); R.pageAt = now;
+  if (!(n > prev && n - prev <= 2)) return;           // só virada de página para frente (não saltos no índice)
+  R.secs += dt;
+  if (!readOn() || C.inflight || C.awaiting) return;
+  const to = lastReadBefore(kind, n); if (to < 0) return;
+  if (!C.readMax || to > C.readMax.pi) C.readMax = { pi:to, b:S.paras[to].t.length };
+  if (!C.from || C.from.pi > to) compStartFrom(to);
+  const [mn, mx] = gaps();
+  let cut = -1;
+  for (let pi = to; pi > (C.from?.pi ?? -1) && pi >= to - 60; pi--) if (readNatural(pi)){ cut = pi; break; }
+  if (R.secs >= mn && (cut >= 0 || R.secs >= mx)){
+    const at = cut >= 0 ? cut : to; R.secs = 0;
+    compCheckAt({ pi:at, b:S.paras[at].t.length }, 'leitura');
+  }
+}
+function showReadBar(){ if (A.on) return; ab.classList.add('reading'); ab.hidden = false; }
+function hideReadBar(){ if (A.on || !ab.classList.contains('reading')) return; ab.classList.remove('reading'); ab.hidden = true; }
+function paintReadBtn(){ const b = $('#r-maggie'); if (!b) return; b.hidden = !A.sample; b.setAttribute('aria-pressed', !!C.doc?.reading); }
+async function readingInit(id){
+  try {
+    if (!S.paras || S.paras.length < 4 || S.cur !== id) return;
+    if (!A.chapters.length || A.bookId !== id){ A.bookId = id; buildChapters(); A.units = []; A.comp.from = null; await loadMeta(); await compLoad(); }
+    R.pageAt = Date.now(); R.secs = 0;
+    paintReadBtn();
+  } catch (e) { console.warn('[marginalia] modo leitura', e); }
+}
+$('#r-maggie').onclick = async e => {
+  e.stopPropagation();
+  if (!A.sample){ toast('A Maggie precisa da IA, que não está disponível agora.'); return; }
+  if (!C.doc) await readingInit(S.cur);
+  cmenu.dataset.ctx = 'read'; cmenu.classList.add('at-top');
+  cmenu.hidden = !cmenu.hidden; if (!cmenu.hidden) renderCompMenu();
+};
 
 /* ---- journal: the reading diary as a little book ---- */
 let jUnsub = null, jDocUnsub = null, jEntries = [], jBets = {}, jDoc = null;
@@ -2822,7 +2918,7 @@ function renderJournal(){
   const n = jEntries.length, bets = Object.keys(jBets).length, ppl = Object.keys(peopleOf(jDoc)).length;
   box.innerHTML = `<button class="dbook" id="dbook-open" aria-label="Abrir o diário de leitura">
       <span class="dbook-spine"></span>
-      <span class="dbook-label"><small>diário de leitura</small><b>${esc(b.title)}</b><em>Julia &amp; Maggie</em></span>
+      <span class="dbook-label"><small>diário de leitura</small><b>${esc(b.title)}</b><em>${esc(userName() || 'Você')} &amp; Maggie</em></span>
     </button>
     <div class="dbook-info">
       <p>${n ? `${n} ${n === 1 ? 'conversa' : 'conversas'}${bets ? ` · ${bets} ${bets === 1 ? 'aposta' : 'apostas'}` : ''}${ppl ? ` · ${ppl} personagens` : ''}` : 'Ainda em branco.'}</p>
@@ -2886,7 +2982,7 @@ function diaryPages(){
       <h2>${esc(b.title)}</h2>
       ${b.author ? `<p class="dy-author">${esc(b.author)}</p>` : ''}
       <div class="dy-orn">❦</div>
-      <p class="dy-by">escrito por Maggie,<br>lido com Julia</p>
+      <p class="dy-by">escrito por Maggie,<br>lido com ${esc(userName() || 'você')}</p>
       ${isFinite(first) ? `<p class="dy-since">desde ${esc(fmtDate(first, true))}</p>` : ''}
       <ul class="dy-stats"><li><b>${jEntries.length}</b>conversas</li><li><b>${bets.length}</b>apostas</li><li><b>${Object.keys(people).length}</b>personagens</li></ul>
     </div>`);
