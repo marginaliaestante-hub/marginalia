@@ -71,7 +71,9 @@ async function getChains(key: string): Promise<Chains> {
   const L = lite.length ? lite.slice(0, 2) : fallbackLite;
   const F = flash.length ? flash.slice(0, 2) : ['gemini-2.5-flash'];
   const G = gemma.slice(0, 1);
-  chains = { quick: [...L, ...G, ...F.slice(0, 1)], default: [...F, ...L, ...G], at: Date.now() };
+  // O Flash grátis está levando 25 a 50 s por resposta; o Flash-Lite responde em 1 a 2 s com boa qualidade.
+  // Por isso os dois níveis começam pelo Flash-Lite e usam o Flash só como reserva.
+  chains = { quick: [...L, ...G, ...F.slice(0, 1)], default: [...L, ...F.slice(0, 1), ...G], at: Date.now() };
   return chains;
 }
 
@@ -86,19 +88,40 @@ function parseJSON(text: string) {
   throw new Error('json_parse');
 }
 
-async function callModel(key: string, model: string, prompt: string) {
+// Modelos que recusaram o ajuste de "raciocínio" (não mandamos de novo)
+const noThinkCfg = new Set<string>();
+
+async function callModel(key: string, model: string, prompt: string): Promise<{ status: number; error?: string; text?: string }> {
   const isGemma = model.startsWith('gemma');
   const body: any = {
     contents: [{ role: 'user', parts: [{ text: isGemma ? prompt + '\n\nResponda apenas com o JSON, sem texto antes ou depois.' : prompt }] }],
     generationConfig: { temperature: 0.7, maxOutputTokens: 8192 },
   };
   if (!isGemma) body.generationConfig.responseMimeType = 'application/json';
-  const r = await fetch(`${GEMINI}/models/${model}:generateContent`, {
-    method: 'POST',
-    headers: { 'x-goog-api-key': key, 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+  // Raciocínio curto: respostas rápidas para a leitura não ficar esperando
+  const thinkCfg = !isGemma && !noThinkCfg.has(model) && ver(model) >= 3;
+  if (thinkCfg) body.generationConfig.thinkingConfig = { thinkingLevel: 'low' };
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 40_000);
+  let r: Response;
+  try {
+    r = await fetch(`${GEMINI}/models/${model}:generateContent`, {
+      method: 'POST',
+      headers: { 'x-goog-api-key': key, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: ctl.signal,
+    });
+  } catch {
+    clearTimeout(timer);
+    cooldown.set(model, Date.now() + 15 * 60e3); // lento demais agora: deixa de lado por 15 min
+    return { status: 504, error: 'demorou demais' };
+  }
+  clearTimeout(timer);
   const j = await r.json().catch(() => ({}));
+  if (!r.ok && r.status === 400 && thinkCfg && /think/i.test(j?.error?.message || '')) {
+    noThinkCfg.add(model);
+    return callModel(key, model, prompt);
+  }
   if (!r.ok) return { status: r.status, error: j?.error?.message || 'erro' };
   const parts = j?.candidates?.[0]?.content?.parts || [];
   const text = parts.filter((p: any) => !p.thought).map((p: any) => p.text || '').join('');
@@ -116,7 +139,7 @@ Deno.serve(async (req) => {
   if (!key) return json(req, { ok: false, code: 'sampling_disabled', error: 'chave do Gemini não configurada' }, 500);
 
   const ch = await getChains(key);
-  if (req.method === 'GET') return json(req, { ok: true, chains: ch, cooling: [...cooldown.keys()] });
+  if (req.method === 'GET') return json(req, { ok: true, chains: ch, cooling: [...cooldown.keys()], noThinkCfg: [...noThinkCfg] });
 
   let input: any;
   try { input = await req.json(); } catch { return json(req, { ok: false, code: 'bad_request' }, 400); }
@@ -141,7 +164,7 @@ Deno.serve(async (req) => {
         cooldown.set(model, Date.now() + (/per.?day|daily|PerDay/i.test(res.error || '') ? 3600e3 : 60e3));
         break;
       }
-      if (res.status === 404 || res.status === 400 || res.status === 403) break; // modelo indisponível: próximo
+      if (res.status === 404 || res.status === 400 || res.status === 403 || res.status === 504) break; // modelo indisponível: próximo
       // 5xx: tenta mais uma vez o mesmo modelo
     }
   }
