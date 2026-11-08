@@ -13,7 +13,7 @@
   --f-body:"Hanken Grotesk", "Segoe UI", system-ui, sans-serif;
   --f-book:"Literata", Georgia, "Times New Roman", serif;
   --f-hand:"Kalam", "Comic Sans MS", cursive;
-  --pi-yellow:#FBE78C; --pi-pink:#F8C6D8; --pi-green:#CBE7B6; --pi-blue:#C3DEF2; --pi-lilac:#DDCDF3;
+  --pi-yellow:#FBE78C; --pi-red:#F6B8AE; --pi-pink:#F8C6D8; --pi-green:#CBE7B6; --pi-blue:#C3DEF2; --pi-lilac:#DDCDF3;
   --pi-ink:#3A2C30;
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
@@ -131,7 +131,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 .postit .q{font-family:var(--f-book);font-style:italic;font-size:13.5px;line-height:1.5;display:-webkit-box;-webkit-line-clamp:5;-webkit-box-orient:vertical;overflow:hidden}
 .postit .n{font-family:var(--f-hand);font-size:17px;line-height:1.3;white-space:pre-wrap}
 .postit .pg{margin-top:auto;font-size:11px;letter-spacing:.08em;text-transform:uppercase;opacity:.6;font-variant-numeric:tabular-nums}
-.c-yellow{background:var(--pi-yellow)} .c-pink{background:var(--pi-pink)} .c-green{background:var(--pi-green)} .c-blue{background:var(--pi-blue)} .c-lilac{background:var(--pi-lilac)}
+.c-yellow{background:var(--pi-yellow)} .c-red{background:var(--pi-red)} .c-pink{background:var(--pi-pink)} .c-green{background:var(--pi-green)} .c-blue{background:var(--pi-blue)} .c-lilac{background:var(--pi-lilac)}
 .board-empty{grid-column:1/-1;color:var(--muted);border:1.5px dashed var(--line);border-radius:14px;padding:28px;text-align:center;font-family:var(--f-hand);font-size:19px}
 
 /* ---------- reader ---------- */
@@ -169,6 +169,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 .flow .gap{height:.9em}
 .flow mark{color:inherit;border-radius:2px;padding:.05em 0;cursor:pointer;-webkit-box-decoration-break:clone;box-decoration-break:clone}
 .flow mark.c-yellow{background:rgba(250,214,60,var(--hl-a))}
+.flow mark.c-red{background:rgba(238,96,84,var(--hl-a))}
 .flow mark.c-pink{background:rgba(245,140,180,var(--hl-a))}
 .flow mark.c-green{background:rgba(140,210,110,var(--hl-a))}
 .flow mark.c-blue{background:rgba(110,180,235,var(--hl-a))}
@@ -202,6 +203,9 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 .pop[hidden]{display:none}
 .pop .dot{width:26px;height:26px;border-radius:50%;border:2px solid transparent}
 .pop .dot[aria-pressed="true"]{border-color:#fff}
+.pop .dot{position:relative}
+.pop .dot span{position:absolute;top:calc(100% + 3px);left:50%;transform:translateX(-50%);font-size:10px;line-height:1;color:#fff;opacity:.85;white-space:nowrap;pointer-events:none}
+.pop.has-labels{padding-bottom:20px}
 .pop .sep{width:1px;height:20px;background:rgba(255,255,255,.25);margin:0 2px}
 .pop .pb{background:none;border:0;color:#fff;font-size:13px;font-weight:500;padding:5px 10px;border-radius:999px;display:inline-flex;align-items:center;gap:5px}
 .pop .pb:hover{background:rgba(255,255,255,.12)}
@@ -620,7 +624,10 @@ input.cname:focus{outline:none;box-shadow:0 1px 0 var(--accent)}
 'use strict';
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const COLORS = ['yellow','pink','green','blue','lilac'];
+// Cores por emoção, como nos post-its da Julia
+const COLORS = ['yellow','blue','red','green','lilac'];
+const COLOR_LABEL = { yellow:'Amei', blue:'Triste', red:'Raiva', green:'Nojo', lilac:'Medo', pink:'Rosa' };
+const COLOR_SAY = { yellow:'amarelo, de amei', blue:'azul, de triste', red:'vermelho, de raiva', green:'verde, de nojo', lilac:'roxo, de medo', pink:'rosa' };
 const STATUS = [['lendo','Lendo'],['quero','Quero ler'],['lido','Lido'],['abandonado','Abandonei']];
 const TABS = [['lendo','Lendo'],['quero','Quero ler'],['lido','Lidos'],['abandonado','Abandonados'],['todos','Todos']];
 const store = {
@@ -1315,7 +1322,8 @@ function checkSel(){
   const text = s.toString().replace(/\s+/g,' ').trim();
   if (!a || !b || !text) return;
   pendingSel = { s:a, e:b, text };
-  pop.innerHTML = COLORS.map(c => `<button class="dot c-${c}" data-new="${c}" aria-label="Grifar"></button>`).join('') + `<span class="sep"></span><button class="pb" data-new-note>${ICON_NOTE}Nota</button>`;
+  pop.classList.add('has-labels');
+  pop.innerHTML = COLORS.map(c => `<button class="dot c-${c}" data-new="${c}" aria-label="Grifar: ${COLOR_LABEL[c]}" title="${COLOR_LABEL[c]}"><span>${COLOR_LABEL[c]}</span></button>`).join('') + `<span class="sep"></span><button class="pb" data-new-note>${ICON_NOTE}Nota</button>`;
   const rects = rg.getClientRects(); const r0 = rects[0] || rg.getBoundingClientRect();
   placePop(matchMedia('(pointer:coarse)').matches ? rects[rects.length-1] || r0 : r0, matchMedia('(pointer:coarse)').matches);
 }
@@ -1337,7 +1345,8 @@ async function createHl(color, withNote){
 function openMarkPop(m){
   const h = S.hls.find(x => x.id === m.dataset.h); if (!h) return;
   pendingSel = null;
-  pop.innerHTML = COLORS.map(c => `<button class="dot c-${c}" data-recolor="${c}" aria-pressed="${h.color===c}" aria-label="Mudar cor"></button>`).join('')
+  pop.classList.add('has-labels');
+  pop.innerHTML = COLORS.map(c => `<button class="dot c-${c}" data-recolor="${c}" aria-pressed="${h.color===c}" aria-label="Mudar para ${COLOR_LABEL[c]}" title="${COLOR_LABEL[c]}"><span>${COLOR_LABEL[c]}</span></button>`).join('')
     + `<span class="sep"></span><button class="pb" data-edit="${h.id}">${ICON_NOTE}${h.note?'Ver nota':'Nota'}</button><button class="pb" data-del="${h.id}">Apagar</button>`;
   pop.dataset.h = h.id;
   placePop(m.getBoundingClientRect(), false);
@@ -2144,13 +2153,17 @@ function maggieAudio(text){
   }
   return ttsCache.get(text);
 }
+// O navegador só deixa tocar som depois de um toque na página: "destrava" o som da Maggie no primeiro toque
+const SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
+function unlockAudio(){ try { const a = MV.audio || (MV.audio = new Audio()); if (a.src && !a.paused) return; a.src = SILENT_WAV; const p = a.play(); if (p) p.then(() => a.pause()).catch(() => {}); } catch {} }
+['pointerdown', 'keydown', 'touchstart'].forEach(ev => document.addEventListener(ev, unlockAudio, { once:true, capture:true }));
 function playBlob(blob){
   return new Promise(res => {
     const a = MV.audio || (MV.audio = new Audio());
     const url = URL.createObjectURL(blob); let done = false;
     const fin = ok => { if (done) return; done = true; a.onended = a.onerror = a.onpause = null; URL.revokeObjectURL(url); res(ok); };
     a.onended = () => fin(true); a.onpause = () => fin(true); a.onerror = () => fin(false);
-    a.src = url; a.play().catch(() => fin(false));
+    a.src = url; a.play().catch(e => { console.warn('[marginalia] voz natural bloqueada pelo navegador:', e?.name || e); fin(false); });
     setTimeout(() => fin(true), 90000);
   });
 }
@@ -2197,7 +2210,34 @@ async function voiceHighlight(pi, a, b, color, note){
 }
 
 /* ---- search only in what was already narrated ---- */
-function readLimit(){ const L = A.lastFinishedUnit; return L ? { pi:L.pi, b:L.b } : null; }
+function readLimit(){ const L = A.lastFinishedUnit; if (A.on && L) return { pi:L.pi, b:L.b }; return pageLimit(); }
+// Modo leitura: o limite é o fim do que está na tela (o que já foi lido mais a página aberta)
+function pageLimit(){
+  if (!S.paras) return null;
+  let pi = -1;
+  if (S.mode === 'flow'){ for (let k = 0; k < S.paras.length; k++){ const st = S.pageOf[k]; if (st == null || st > S.page) break; pi = k; } }
+  else { for (let k = 0; k < S.paras.length; k++){ if ((S.paras[k].p || 0) <= S.pdfPage) pi = k; else break; } }
+  return pi < 0 ? null : { pi, b: S.paras[pi].t.length };
+}
+// Último parágrafo que termina na página aberta
+function lastParaOnPage(){
+  const lim = pageLimit(); if (!lim) return -1;
+  if (S.mode !== 'flow') return lim.pi;
+  for (let k = lim.pi; k >= 0; k--){ const nx = S.pageOf[k + 1]; if (!S.paras[k].h && (nx == null || nx <= S.page)) return k; }
+  return lim.pi;
+}
+function findForward(q, from, lim){
+  const nq = norm(q); if (nq.length < 3) return null;
+  for (let pi = from.pi; pi <= lim.pi; pi++){
+    const full = S.paras[pi].t, a0 = pi === from.pi ? from.o : 0, t = pi === lim.pi ? full.slice(0, lim.b) : full;
+    const { out, map } = normMap(t);
+    let k = (' ' + out + ' ').indexOf(' ' + nq + ' ');
+    while (k >= 0 && map[k] < a0) k = (' ' + out + ' ').indexOf(' ' + nq + ' ', k + 1);
+    if (k >= 0) return { pi, a: map[k], b: map[Math.min(map.length - 1, k + nq.length - 1)] + 1 };
+  }
+  return null;
+}
+const rangeText = (s, e) => { const out = []; for (let p = s.p; p <= e.p; p++){ const t = S.paras[p].t; out.push(t.slice(p === s.p ? s.o : 0, p === e.p ? e.o : t.length)); } return out.join('\n').trim(); };
 function findQuote(q){
   const lim = readLimit(); if (!lim) return [];
   const nq = norm(q); if (nq.length < 4) return [];
@@ -2234,7 +2274,15 @@ function findQuote(q){
 }
 
 /* ---- local command parser ---- */
-const COLOR_WORDS = { amarel:'yellow', rosa:'pink', verde:'green', azul:'blue', lilas:'lilac', roxo:'lilac', violeta:'lilac' };
+// Cor dita por nome ou pela emoção: amarelo = amei, azul = triste, vermelho = raiva, verde = nojo, roxo = medo
+const COLOR_WORDS = [
+  [/\b(vermelh|raiva|odio|irrit|revolt|furia|furios|bravo|brava)/, 'red'],
+  [/\b(roxo|roxa|lilas|violeta|medo|assust|terror|panico|arrepi)/, 'lilac'],
+  [/\b(verde|nojo|nojent|asco|repugn)/, 'green'],
+  [/\b(azul|trist|chor|deprim)/, 'blue'],
+  [/\b(amarel|amei|adorei|gostei|legal|incrivel|lind|maravilh|favorit)/, 'yellow'],
+  [/\b(rosa)/, 'red']
+];
 function parseCommand(raw){
   let text = raw.trim();
   const w = text.match(/^.*\b(?:ei|hey|oi)?[,\s]*(?:maggie|magg?ie|mag+i|magui|meg+ie|meg+i|margin[aá]lia|marginal|margarida|claude|cloud)\b[,.!:\s]*/i);
@@ -2258,20 +2306,31 @@ function parseCommand(raw){
   }
   note = note.replace(/^["“'‘]|["”'’]\.?$/g, '').trim();
   if (note) note = note[0].toUpperCase() + note.slice(1);
-  // quote: text in quotes, or after "a frase / o trecho / a parte"
+  // cor dita no fim ("em vermelho", "de raiva") não faz parte da citação
+  const headQ = head.replace(/\s*(?:,\s*)?(?:em|de|com|na|no|cor)?\s*(?:a\s+)?(?:cor\s+)?(?:vermelh\w*|azul|verde|rox[oa]|lil[aá]s|violeta|amarel\w*|rosa|raiva|medo|nojo|tristeza|triste|amei)\s*[.!]?\s*$/i, '').trim();
+  // trecho maior: "de X até Y"
+  const rg = headQ.match(/\b(?:de|desde|do|da)\s+["“'‘]?(.{4,}?)["”'’]?\s+at[eé]\s+(?:o\s+|a\s+)?["“'‘]?(.{3,}?)["”'’]?\s*[.!]?$/i);
+  // "este parágrafo"
+  const isPara = /\b(?:este|esse|o|aquele|ultimo|último)\s+par[aá]grafo\b/i.test(headQ);
+  // descrição: "a parte em que...", "o momento quando...", "o trecho que fala..."
+  const ds = headQ.match(/\b(?:a\s+parte|o\s+trecho|o\s+momento|a\s+cena|a\s+frase|a\s+passagem)\s+(?:em\s+que|onde|que\s+fala|que\s+conta|quando|sobre|na\s+qual|no\s+qual)\s+(.{6,})$/i);
   let quote = '';
-  const qm = head.match(/["“'‘]([^"”'’]{4,})["”'’]/);
-  if (qm) quote = qm[1];
+  const qm = headQ.match(/["“'‘]([^"”'’]{4,})["”'’]/);
+  if (rg || isPara || ds) {}
+  else if (qm) quote = qm[1];
   else {
-    const fm = head.match(/(?:^|\s)(?:a\s+frase|o\s+trecho|a\s+parte|a\s+passagem|onde\s+diz|que\s+diz)\s*[:,]?\s+(.{6,})$/i);
-    if (fm && !/^(que voc[eê]|que acabou|anterior|passada|de agora|atual)/i.test(fm[1].trim()) && !/^(ultima|última|essa|esta|aqui)/i.test(fm[1].trim())) quote = fm[1];
+    const fm = headQ.match(/(?:^|\s)(?:a\s+frase|o\s+trecho|a\s+parte|a\s+passagem|onde\s+diz|que\s+diz)\s*[:,]?\s+(.{6,})$/i);
+    if (fm && !/^(que voc[eê]|que acabou|anterior|passada|de agora|atual)/i.test(fm[1].trim()) && !/^(ultima|última|essa|esta|aqui)(?![a-zà-ú])/i.test(fm[1].trim())) quote = fm[1];
   }
   const hn = norm(head);
   let color = 'yellow';
-  for (const [k,cv] of Object.entries(COLOR_WORDS)) if (new RegExp('\\b' + k).test(hn)) { color = cv; break; }
+  for (const [re, cv] of COLOR_WORDS) if (re.test(hn)) { color = cv; break; }
   let target = 'last';
   if (/(penultima|frase anterior|antes dessa|antes desta)/.test(hn)) target = 'prev';
+  if (isPara) target = 'para';
   if (quote) target = 'quote';
+  if (ds) return { act:'highlight', target:'describe', desc: ds[1].trim(), note, color };
+  if (rg) return { act:'highlight', target:'range', quote: rg[1].trim(), quoteEnd: rg[2].trim(), note, color };
   return { act:'highlight', target, quote: quote.trim(), note, color };
 }
 
@@ -2285,7 +2344,7 @@ Comando: "${text}"
 Últimas frases já ouvidas (para referência): "${recent}"
 
 Ações possíveis: "destacar" (grifar um trecho, com ou sem anotação), "continuar", "pausar", "repetir", "pular", "nenhuma".
-Responda só com JSON: {"acao":"destacar|continuar|pausar|repetir|pular|nenhuma","alvo":"ultima|anterior|citacao","citacao":"trecho exato citado, se houver","nota":"texto da anotação, se houver, exatamente como ditado","cor":"yellow|pink|green|blue|lilac"}`;
+Responda só com JSON: {"acao":"destacar|continuar|pausar|repetir|pular|nenhuma","alvo":"ultima|anterior|citacao","citacao":"trecho exato citado, se houver","nota":"texto da anotação, se houver, exatamente como ditado","cor":"yellow (amei) | blue (triste) | red (raiva) | green (nojo) | lilac (medo)"}`;
   try { return await A.sample.json(prompt, { modelTier:'quick', cache:false }); } catch { return null; }
 }
 
@@ -2318,11 +2377,22 @@ async function runCommand(raw){
   } finally { V.busy = false; }
 }
 async function doHighlight(c){
-  const L = A.lastFinishedUnit;
-  if (!L){ await say('Ainda não terminei de ler nenhuma frase. Dê play primeiro.'); releaseHold(true); return; }
+  const lim = readLimit();
+  if (!lim){ await say('Ainda não lemos nada deste livro juntas.'); releaseHold(true); return; }
+  if (c.target === 'describe') return await describeHighlight(c, c.desc);
+  if (c.target === 'range'){
+    const st = findQuote(c.quote)[0];
+    if (!st){ await say('Não encontrei onde começa esse trecho no que você já leu. Pode repetir o começo?'); return; }
+    const en = findForward(c.quoteEnd, { pi: st.pi, o: st.a }, lim);
+    if (!en){ await say('Achei o começo, mas não o fim do trecho. Pode repetir como ele termina?'); return; }
+    return await finishHighlight(st.pi === en.pi ? { pi: st.pi, a: st.a, b: en.b } : { s:{ p: st.pi, o: st.a }, e:{ p: en.pi, o: en.b } }, c);
+  }
   if (c.target === 'quote'){
     const found = findQuote(c.quote);
-    if (!found.length){ await say('Não encontrei esse trecho no que já li. Pode repetir a frase?'); return; }
+    if (!found.length){
+      if (c.quote.split(/\s+/).length >= 3 && A.sample) return await describeHighlight(c, c.quote);   // ditado errado: a IA procura pelo sentido
+      await say('Não encontrei esse trecho no que você já leu. Pode repetir a frase?'); return;
+    }
     if (found.length > 1){
       V.pending = { c, found };
       const ords = ['primeiro','segundo','terceiro'];
@@ -2334,17 +2404,64 @@ async function doHighlight(c){
     }
     return await finishHighlight(found[0], c);
   }
-  let target = { pi:L.pi, a:L.a, b:L.b };
-  if (c.target === 'prev'){
-    const i = A.units.findIndex(u => u.pi === L.pi && u.a === L.a);
-    const p = i > 0 ? A.units[i-1] : null;
-    if (!p){ await say('Não encontrei a frase anterior.'); return; }
-    target = { pi:p.pi, a:p.a, b:p.b };
+  const L = A.lastFinishedUnit;
+  if (A.on && L){
+    if (c.target === 'para') return await finishHighlight({ pi:L.pi, a:0, b:S.paras[L.pi].t.length }, c);
+    let target = { pi:L.pi, a:L.a, b:L.b };
+    if (c.target === 'prev'){
+      const i = A.units.findIndex(u => u.pi === L.pi && u.a === L.a);
+      const p = i > 0 ? A.units[i-1] : null;
+      if (!p){ await say('Não encontrei a frase anterior.'); return; }
+      target = { pi:p.pi, a:p.a, b:p.b };
+    }
+    return await finishHighlight(target, c);
   }
-  return await finishHighlight(target, c);
+  // modo leitura: a última frase (ou o parágrafo) que termina na página aberta
+  let pi = lastParaOnPage();
+  if (pi < 0){ await say('Não encontrei a página.'); return; }
+  if (c.target === 'para') return await finishHighlight({ pi, a:0, b:S.paras[pi].t.length }, c);
+  let ss = sentences(S.paras[pi].t, 0, S.paras[pi].t.length);
+  let k = ss.length - 1 - (c.target === 'prev' ? 1 : 0);
+  if (k < 0){ pi--; while (pi >= 0 && S.paras[pi].h) pi--; if (pi < 0){ await say('Não encontrei a frase anterior.'); return; } ss = sentences(S.paras[pi].t, 0, S.paras[pi].t.length); k = ss.length - 1; }
+  return await finishHighlight({ pi, a:ss[k][0], b:ss[k][1] }, c);
+}
+// Grifo pela descrição: a IA procura, só no que já foi lido, e a leitora confirma antes de salvar
+async function describeHighlight(c, desc){
+  if (!A.sample){ await say('Para achar o trecho pela descrição eu preciso da IA, e ela não está disponível agora.'); return; }
+  const lim = readLimit(), sents = [];
+  for (let pi = lim.pi; pi >= 0 && sents.length < 160; pi--){
+    if (S.paras[pi].h) continue;
+    const t = S.paras[pi].t, ss = sentences(t, 0, pi === lim.pi ? lim.b : t.length);
+    for (let k = ss.length - 1; k >= 0 && sents.length < 160; k--){ const x = t.slice(ss[k][0], ss[k][1]).trim(); if (x) sents.push({ pi, a:ss[k][0], b:ss[k][1], t:x }); }
+  }
+  sents.reverse();
+  vcMsg('Procurando o trecho…'); $('#ab-status').classList.add('busy');
+  const prompt = `A leitora pediu, por voz, para grifar um trecho do livro. A transcrição pode ter erros. Ache as frases que ela quer, SÓ entre as frases numeradas abaixo (são as que ela já leu).
+Pedido: "${desc}"
+
+Frases:
+${sents.map((x, i) => `[${i + 1}] ${x.t}`).join('\n')}
+
+Responda só com JSON: {"inicio": número da primeira frase, "fim": número da última frase (pode ser igual a "inicio"; no máximo 6 frases)}. Se nenhuma combinar, responda {"inicio": null}.`;
+  let r = null; try { r = await A.sample.json(prompt, { modelTier:'default' }); } catch {}
+  const i = Number(r?.inicio), j = Number(r?.fim ?? r?.inicio);
+  if (!i || !sents[i - 1]){ await say('Não achei esse trecho no que você já leu. Pode citar uma frase dele?'); return; }
+  const a = sents[i - 1], b = sents[Math.min(sents.length, Math.max(i, Math.min(j || i, i + 5))) - 1];
+  const target = a.pi === b.pi ? { pi:a.pi, a:a.a, b:b.b } : { s:{ p:a.pi, o:a.a }, e:{ p:b.pi, o:b.b } };
+  const preview = a.pi === b.pi ? S.paras[a.pi].t.slice(a.a, b.b).trim() : `${a.t} … ${b.t}`;
+  V.pending = { kind:'confirm', c, target };
+  await say(`É este trecho? ${preview.length > 260 ? preview.slice(0, 257) + '…' : preview} Diga sim ou não.`);
+  vcMsg('É este trecho? Diga “sim” ou “não”.');
 }
 async function answerPending(raw){
   const n = norm(stripWake(raw));
+  if (V.pending.kind === 'confirm'){
+    const { c, target } = V.pending;
+    if (/^(sim|isso|pode|e esse|é esse|esse mesmo|isso mesmo|certo|exato|ok|confirmo|grifa|pode grifar)\b/.test(n)){ V.pending = null; return await finishHighlight(target, c); }
+    V.pending = null;
+    await say(/^(nao|não|errado|outro|cancel)/.test(n) ? 'Tudo bem, não grifei. Se quiser, cite uma frase do trecho.' : 'Não entendi, então não grifei nada.');
+    releaseHold(true); return;
+  }
   const { c, found } = V.pending;
   if (/(cancel|esquece|nenhum|deixa)/.test(n)){ V.pending = null; await say('Tudo bem, não marquei nada.'); releaseHold(true); return; }
   const idx = /(primeir|\b1\b|um\b)/.test(n) ? 0 : /(segund|\b2\b|dois)/.test(n) ? 1 : /(terceir|\b3\b|tres)/.test(n) ? 2 : -1;
@@ -2353,9 +2470,11 @@ async function answerPending(raw){
   return await finishHighlight(found[idx], c);
 }
 async function finishHighlight(t, c){
-  const id = await voiceHighlight(t.pi, t.a, t.b, c.color, c.note);
+  const id = t.s
+    ? await saveHighlight({ s:t.s, e:t.e, text: rangeText(t.s, t.e), color:c.color, note:c.note })
+    : await voiceHighlight(t.pi, t.a, t.b, c.color, c.note);
   if (!id){ await say('Não consegui salvar agora. Tente de novo.'); return; }
-  await say(c.note ? 'Prontinho! Destaque e anotação salvos.' : 'Prontinho! Destaque salvo.');
+  await say(`Prontinho! Grifei em ${COLOR_SAY[c.color] || 'amarelo'}${c.note ? ', com a sua anotação' : ''}.`);
   releaseHold(true);
 }
 
