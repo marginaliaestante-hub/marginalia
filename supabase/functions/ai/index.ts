@@ -46,7 +46,7 @@ async function userFrom(req: Request) {
 }
 
 // ---------- escolha de modelos (descoberta automática, guardada por algumas horas) ----------
-type Chains = { quick: string[]; default: string[]; at: number };
+type Chains = { quick: string[]; default: string[]; deep: string[]; at: number };
 let chains: Chains | null = null;
 const ver = (name: string) => {
   const m = name.match(/(\d+(?:\.\d+)?)/); return m ? parseFloat(m[1]) : 0;
@@ -73,7 +73,8 @@ async function getChains(key: string): Promise<Chains> {
   const G = gemma.slice(0, 1);
   // O Flash grátis está levando 25 a 50 s por resposta; o Flash-Lite responde em 1 a 2 s com boa qualidade.
   // Por isso os dois níveis começam pelo Flash-Lite e usam o Flash só como reserva.
-  chains = { quick: [...L, ...G, ...F.slice(0, 1)], default: [...L, ...F.slice(0, 1), ...G], at: Date.now() };
+  // 'deep' (análises feitas em segundo plano, onde a espera não incomoda) usa o Flash primeiro.
+  chains = { quick: [...L, ...G, ...F.slice(0, 1)], default: [...L, ...F.slice(0, 1), ...G], deep: [...F, ...L, ...G], at: Date.now() };
   return chains;
 }
 
@@ -91,7 +92,7 @@ function parseJSON(text: string) {
 // Modelos que recusaram o ajuste de "raciocínio" (não mandamos de novo)
 const noThinkCfg = new Set<string>();
 
-async function callModel(key: string, model: string, prompt: string): Promise<{ status: number; error?: string; text?: string }> {
+async function callModel(key: string, model: string, prompt: string, timeoutMs = 40_000): Promise<{ status: number; error?: string; text?: string }> {
   const isGemma = model.startsWith('gemma');
   const body: any = {
     contents: [{ role: 'user', parts: [{ text: isGemma ? prompt + '\n\nResponda apenas com o JSON, sem texto antes ou depois.' : prompt }] }],
@@ -102,7 +103,7 @@ async function callModel(key: string, model: string, prompt: string): Promise<{ 
   const thinkCfg = !isGemma && !noThinkCfg.has(model) && ver(model) >= 3;
   if (thinkCfg) body.generationConfig.thinkingConfig = { thinkingLevel: 'low' };
   const ctl = new AbortController();
-  const timer = setTimeout(() => ctl.abort(), 40_000);
+  const timer = setTimeout(() => ctl.abort(), timeoutMs);
   let r: Response;
   try {
     r = await fetch(`${GEMINI}/models/${model}:generateContent`, {
@@ -120,7 +121,7 @@ async function callModel(key: string, model: string, prompt: string): Promise<{ 
   const j = await r.json().catch(() => ({}));
   if (!r.ok && r.status === 400 && thinkCfg && /think/i.test(j?.error?.message || '')) {
     noThinkCfg.add(model);
-    return callModel(key, model, prompt);
+    return callModel(key, model, prompt, timeoutMs);
   }
   if (!r.ok) return { status: r.status, error: j?.error?.message || 'erro' };
   const parts = j?.candidates?.[0]?.content?.parts || [];
@@ -145,14 +146,14 @@ Deno.serve(async (req) => {
   try { input = await req.json(); } catch { return json(req, { ok: false, code: 'bad_request' }, 400); }
   const prompt = String(input?.prompt || '');
   if (!prompt || prompt.length > 200_000) return json(req, { ok: false, code: 'bad_request' }, 400);
-  const tier = input?.tier === 'default' ? 'default' : 'quick';
+  const tier: 'quick' | 'default' | 'deep' = input?.tier === 'deep' ? 'deep' : input?.tier === 'default' ? 'default' : 'quick';
 
   let lastErr = '', sawLimit = false;
   for (const model of ch[tier]) {
     const until = cooldown.get(model);
     if (until && until > Date.now()) { sawLimit = true; continue; }
     for (let attempt = 0; attempt < 2; attempt++) {
-      const res = await callModel(key, model, prompt);
+      const res = await callModel(key, model, prompt, tier === 'deep' && !/lite|gemma/.test(model) ? 100_000 : 40_000);
       if (res.status === 200) {
         try { return json(req, { ok: true, data: parseJSON(res.text!), model }); }
         catch { lastErr = 'json_parse'; continue; } // tenta de novo uma vez

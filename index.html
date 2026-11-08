@@ -1365,7 +1365,7 @@ $('#n-text').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.meta
 
 /* ================= AUDIOBOOK ================= */
 const syn = window.speechSynthesis;
-const A = { on:false, playing:false, meta:null, units:[], idx:0, chap:0, chapters:[], blocks:{}, labels:{}, pending:{}, voices:[], speed: store.get('speed', 1), cur:null, waiting:false, sample:null, busy:'' };
+const A = { on:false, playing:false, meta:null, units:[], idx:0, chap:0, chapters:[], blocks:{}, labels:{}, emo:{}, pending:{}, voices:[], speed: store.get('speed', 1), cur:null, waiting:false, sample:null, busy:'' };
 const ab = $('#ab'), sheet = $('#ab-sheet');
 const ICON_PLAY = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>';
 const ICON_PAUSE = '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6.5" y="5" width="4" height="14" rx="1"/><rect x="13.5" y="5" width="4" height="14" rx="1"/></svg>';
@@ -1459,7 +1459,7 @@ function saveMeta(now){
   if (now) return run(); metaT = setTimeout(run, 700);
 }
 async function loadMeta(){
-  A.meta = null; A.blocks = {}; A.labels = {}; A.pending = {};
+  A.meta = null; A.blocks = {}; A.labels = {}; A.emo = {}; A.pending = {}; A.planFailAt = 0;
   if (!S.db) return;
   try { const s = await metaRef().get(); if (s.exists) A.meta = JSON.parse(JSON.stringify(s.data())); } catch {}
 }
@@ -1470,67 +1470,204 @@ function speakerCfg(sp){
 }
 const speakerName = sp => (!sp || sp === 'narr') ? 'Narrador' : (A.meta.cast?.[sp]?.name || 'Narrador');
 
-/* ---- analysis via Claude ---- */
+/* ---- análise pela IA: plano do livro (quem narra cada capítulo, fichas) e falas bloco a bloco ---- */
+const PLAN_V = 2;
+const EMOS = ['sussurro','grito','choro','riso','raiva','medo','ironia','tristeza','animacao'];
+const EMO_FX = { sussurro:{r:.9,p:.95,v:.55}, grito:{r:1.08,p:1.12,v:1}, choro:{r:.88,p:.94,v:.9}, tristeza:{r:.9,p:.94,v:.9}, riso:{r:1.06,p:1.08,v:1}, animacao:{r:1.07,p:1.06,v:1}, raiva:{r:1.05,p:.94,v:1}, medo:{r:1.1,p:1.05,v:.9}, ironia:{r:.95,p:1,v:1} };
+const slugId = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9_-]/g,'').slice(0,40);
 function castBrief(){
-  return Object.entries(A.meta.cast || {}).map(([id,c]) => ({ id, nome:c.name, genero:c.gender, idade:c.age, descricao:c.desc }));
+  return Object.entries(A.meta.cast || {}).map(([id,c]) => ({ id, nome:c.name, ...(c.aliases?.length ? { apelidos:c.aliases } : {}), genero:c.gender, idade:c.age, ...(c.temper ? { temperamento:c.temper } : {}), ...(c.desc ? { jeito_de_falar:c.desc } : {}) }));
+}
+// Quem narra o capítulo deste parágrafo: id do personagem (1ª pessoa) ou 'narr'
+function narrFor(pi){ const id = A.meta?.plan?.pov?.[chapOf(pi)]; return id && A.meta.cast?.[id] ? id : 'narr'; }
+// Capítulo mais adiantado que a leitora já ouviu (o elenco não mostra quem ainda não apareceu)
+function seenChap(){ return Math.max(A.meta?.maxChap || 0, A.chap || 0); }
+function visibleCast(){
+  const s = seenChap();
+  return Object.entries(A.meta?.cast || {}).filter(([,c]) => c.fixed || (c.firstChap ?? 0) <= s)
+    .sort((a,b) => (!!b[1].narrates - !!a[1].narrates));
+}
+function findByName(n){
+  const s = slugId(n); if (!s) return null;
+  const hit = Object.entries(A.meta.cast || {}).find(([id,c]) => id === s || slugId(c.name) === s || (c.aliases || []).some(x => slugId(x) === s));
+  return hit ? hit[0] : null;
+}
+// Acrescenta um personagem (ou completa a ficha de um já conhecido, sem apagar ajustes da leitora)
+function addCast(p, chap){
+  if (!p) return null;
+  const cast = A.meta.cast || (A.meta.cast = {});
+  const id = slugId(p.id || p.nome);
+  if (!id || ['narrador','narr','nenhum'].includes(id)) return null;
+  const aliases = Array.isArray(p.apelidos) ? p.apelidos.map(x => String(x).slice(0,40)).filter(Boolean) : [];
+  const c = cast[id] || (findByName(p.nome) && cast[findByName(p.nome)]);
+  if (c){
+    if (!c.temper && p.temperamento) c.temper = String(p.temperamento).slice(0,80);
+    if (!c.desc && (p.jeito_de_falar || p.descricao)) c.desc = String(p.jeito_de_falar || p.descricao).slice(0,120);
+    if (aliases.length) c.aliases = [...new Set([...(c.aliases || []), ...aliases])].slice(0,6);
+    if ((!c.gender || /indefinid/.test(c.gender)) && p.genero) c.gender = p.genero;
+    if ((!c.age || /indefinid/.test(c.age)) && p.idade) c.age = p.idade;
+    if (chap != null && (c.firstChap == null || chap < c.firstChap)) c.firstChap = chap;
+    return null;
+  }
+  cast[id] = { name:String(p.nome || id).slice(0,60), gender:p.genero || 'indefinido', age:p.idade || 'indefinida',
+    desc:String(p.jeito_de_falar || p.descricao || '').slice(0,120), temper:String(p.temperamento || '').slice(0,80),
+    aliases:aliases.slice(0,6), firstChap: chap ?? 0, voice:'', pitch:1, rate:1 };
+  return id;
+}
+
+function chapterOpening(c, max){
+  const P = S.paras; let s = '';
+  for (let i = c.start; i <= c.end && s.length < max; i++){ if (P[i].h) continue; s += P[i].t + '\n'; }
+  return s.slice(0, max).trim();
+}
+// Plano do livro: feito uma vez por livro, com o modelo mais caprichado, e guardado em audio/{livro}
+async function ensurePlan(){
+  const m = A.meta;
+  if (!m || m.plan?.v >= PLAN_V || !A.sample) return;
+  if (A.planJob) return A.planJob;
+  A.planJob = (async () => {
+    A.busy = 'Conhecendo o livro e quem narra cada capítulo…'; paintAb();
+    const chs = A.chapters.map((c,n) => ({ n, titulo: c.title ? c.title.slice(0,80) : '', abertura: chapterOpening(c, 1100) }))
+      .filter(x => x.abertura.length > 40);
+    const batches = []; let cur = [], len = 0;
+    for (const x of chs){ const l = x.abertura.length + x.titulo.length + 40; if (len + l > 70000 && cur.length){ batches.push(cur); cur = []; len = 0; } cur.push(x); len += l; }
+    if (cur.length) batches.push(cur);
+    const plan = { v:PLAN_V, at:Date.now(), pov:{}, tipo:'' };
+    for (const bt of batches){
+      const known = castBrief();
+      const prompt = `Você vai preparar um audiobook dramatizado em português. Abaixo estão o título e o começo de cada capítulo de um livro (só os primeiros parágrafos de cada um).
+
+Tarefa 1: diga quem narra cada capítulo.
+- Se o capítulo é narrado em primeira pessoa ("eu"), descubra QUEM é o "eu". Pistas: o título do capítulo (muitos livros usam o nome de quem narra), o nome pelo qual os outros chamam o "eu", relações citadas (minha filha, meu marido) e o contexto. Responda com o id desse personagem.
+- Se o capítulo é narrado em terceira pessoa, responda "narrador".
+- Se não é capítulo de história (sumário, dedicatória, agradecimentos, sobre a autora, direitos autorais), responda "nenhum".
+- Se não der para saber, responda "narrador".
+
+Tarefa 2: liste os personagens que aparecem nesses trechos, incluindo quem narra. Para cada um: id curto (minúsculo, sem acento), nome, apelidos usados no texto, gênero, idade aproximada, temperamento (até 8 palavras) e jeito de falar (até 8 palavras). "primeiro_capitulo" é o número do primeiro capítulo, entre os listados, em que a pessoa aparece ou é citada.
+
+Importante:
+- Use apenas o que está nos trechos. Não use conhecimento prévio sobre o livro, mesmo que o reconheça, e não invente personagens.
+- Não reescreva nem resuma o texto.
+${known.length ? `- Personagens já conhecidos (reaproveite estes ids): ${JSON.stringify(known)}\n` : ''}
+Capítulos:
+${bt.map(x => `### Capítulo ${x.n}${x.titulo ? ` (título: ${x.titulo})` : ''}\n${x.abertura}`).join('\n\n')}
+
+Responda só com JSON:
+{"tipo_narracao":"primeira pessoa alternada|primeira pessoa única|terceira pessoa|mista","capitulos":[{"n":0,"narrador":"id do personagem|narrador|nenhum"}],"personagens":[{"id":"ana","nome":"Ana","apelidos":[],"genero":"feminino|masculino|indefinido","idade":"criança|jovem|adulta|idosa|indefinida","temperamento":"","jeito_de_falar":"","primeiro_capitulo":1}]}
+Em "capitulos" inclua todos os números listados.`;
+      const r = await A.sample.json(prompt, { modelTier:'deep' });
+      if (r?.tipo_narracao && !plan.tipo) plan.tipo = String(r.tipo_narracao);
+      for (const p of (Array.isArray(r?.personagens) ? r.personagens : [])){ const fc = Number(p.primeiro_capitulo); addCast(p, Number.isFinite(fc) ? fc : null); }
+      for (const c of (Array.isArray(r?.capitulos) ? r.capitulos : [])){
+        const n = Number(c.n), id = slugId(c.narrador), real = id && (A.meta.cast[id] ? id : findByName(c.narrador));
+        if (Number.isFinite(n) && real) plan.pov[n] = real;
+      }
+    }
+    for (const [n,id] of Object.entries(plan.pov)){ const c = A.meta.cast[id]; if (c){ c.narrates = true; if (c.firstChap == null || +n < c.firstChap) c.firstChap = +n; } }
+    if (/primeira/i.test(plan.tipo) || Object.keys(plan.pov).length) m.narrator.pessoa = 'primeira';
+    else if (/terceira/i.test(plan.tipo)) m.narrator.pessoa = 'terceira';
+    m.plan = plan;
+    A.busy = '';
+    await suggestVoices(false);
+  })();
+  try { await A.planJob; } finally { A.planJob = null; A.busy = ''; paintAb(); }
+}
+
+// Lê a resposta da IA sobre as falas de um bloco
+function readFalas(res, map, k, chap, only){
+  let added = false;
+  for (const p of (Array.isArray(res?.personagens) ? res.personagens : [])) if (addCast(p, chap)) added = true;
+  const falas = (res && res.falas) || {}, labels = {}, emo = {}; let nulls = 0;
+  for (let n = 1; n <= k; n++){
+    const key = map[n]; if (only && !only.has(key)) continue;
+    let v = falas[n] ?? falas[String(n)], e = null;
+    if (v && typeof v === 'object'){ e = v.e ?? v.emocao ?? null; v = v.q ?? v.quem ?? null; }
+    const id = v ? slugId(v) : '';
+    const lab = !id ? null : (id === 'narrador' || id === 'narr') ? 'narr' : (A.meta.cast[id] ? id : findByName(v));
+    labels[key] = lab || null; if (!lab) nulls++;
+    e = e ? slugId(e) : '';
+    if (e && EMOS.includes(e)) emo[key] = e;
+  }
+  return { labels, emo, nulls, added };
+}
+function blockPrompt(blk, lines, k, extra){
+  const P = S.paras, chap = chapOf(blk.start), ch = A.chapters[chap];
+  const pov = narrFor(blk.start), povC = pov !== 'narr' ? A.meta.cast[pov] : null;
+  const povLine = povC
+    ? `Este capítulo é narrado em primeira pessoa por ${povC.name} (id "${pov}"): o "eu" do texto é ${povC.name}. Quando a narradora fala em voz alta ("eu digo", "pergunto", "respondo"), a fala é de ${povC.name}.`
+    : (A.meta.narrator?.pessoa === 'terceira' ? 'Este capítulo é narrado em terceira pessoa.' : 'Se houver um "eu" narrador, descubra pelo texto quem é; as falas em voz alta do "eu" são dele.');
+  const ctx = blk.start > ch.start ? P.slice(Math.max(ch.start, blk.start - 6), blk.start).map(x => x.t).join('\n') : '';
+  return `Você é diretor(a) de um audiobook dramatizado em português. As falas do trecho estão marcadas como ⟦n⟧…⟦/n⟧. Para cada fala marcada, diga quem fala e, se o texto indicar, com que emoção.
+
+Capítulo: "${ch?.label || ''}". ${povLine}
+
+Regras:
+- Use as pistas do texto: verbos de elocução (disse, perguntou, respondeu, murmurou), nomes e apelidos citados, quem estava em cena, quem trata quem por qual nome, a alternância natural do diálogo e o conteúdo da fala (quem pergunta, quem responde).
+- Num diálogo sem "disse fulano", siga a alternância entre as pessoas em cena e confira se o conteúdo combina com cada uma.
+- Se não tiver certeza razoável de quem fala, responda null. É muito melhor null do que a pessoa errada.
+- Se o trecho marcado não for fala de personagem (citação, título, ênfase entre aspas, placa, mensagem lida), responda "narrador".
+- Reaproveite os ids do elenco conhecido (confira os apelidos). Crie personagem novo só para quem fala neste trecho; ids curtos, minúsculos, sem acento.
+- Emoção ("e"): só quando o texto indicar claramente (sussurrou, gritou, chorando, rindo, com raiva, com medo, ironicamente, triste, animada). Valores: ${EMOS.join(', ')}. Caso contrário, omita "e".
+- Não reescreva, não resuma e não comente o texto.
+
+Elenco conhecido: ${JSON.stringify(castBrief())}
+${ctx ? `\nContexto anterior (sem marcações):\n${ctx}\n` : ''}
+Trecho:
+${lines.join('\n')}
+
+Responda só com JSON neste formato:
+{"personagens":[{"id":"helena","nome":"Helena","apelidos":[],"genero":"feminino|masculino|indefinido","idade":"criança|jovem|adulta|idosa|indefinida","temperamento":"até 8 palavras","jeito_de_falar":"até 8 palavras"}],"falas":{"1":{"q":"helena","e":"sussurro"},"2":{"q":null},"3":{"q":"narrador"}}}
+Em "personagens" liste só personagens novos. Em "falas" inclua todos os números de 1 a ${k}.${extra || ''}`;
 }
 async function ensureBlock(blk){
   if (A.blocks[blk.id]) return;
   if (A.pending[blk.id]) return A.pending[blk.id];
   const job = (async () => {
     const ref = S.db.doc(`audio/${S.cur}/blk/${blk.id}`);
-    try { const s = await ref.get(); if (s.exists){ const d = s.data(); Object.assign(A.labels, d.labels || {}); A.blocks[blk.id] = true; return; } } catch {}
+    try {
+      const s = await ref.get();
+      if (s.exists){ const d = s.data(); if (d.v >= 2 || d.manual){ Object.assign(A.labels, d.labels || {}); Object.assign(A.emo, d.emo || {}); A.blocks[blk.id] = true; return; } }
+    } catch {}
     const P = S.paras, map = {}, lines = []; let k = 0;
     for (let pi = blk.start; pi <= blk.end; pi++){
       const t = P[pi].t; let s = '';
       for (const sg of segPara(t)){ const piece = t.slice(sg.a, sg.b); if (sg.sp){ k++; map[k] = `${pi}:${sg.a}`; s += `⟦${k}⟧${piece}⟦/${k}⟧`; } else s += piece; }
       lines.push(s);
     }
-    if (!k){ A.blocks[blk.id] = true; try { await ref.set({ labels:{}, at:Date.now() }); } catch {} return; }
+    if (!k){ A.blocks[blk.id] = true; try { await ref.set({ labels:{}, emo:{}, v:2, at:Date.now() }); } catch {} return; }
     if (!A.sample) throw { code:'not_granted' };
-    const b = book(S.cur);
-    const ctx = blk.start > 0 ? P.slice(Math.max(0, blk.start-3), blk.start).map(x=>x.t).join('\n') : '';
-    const first = !A.meta.narrator?.pessoa;
-    const prompt = `Você é diretor(a) de um audiobook dramatizado em português. Abaixo está um trecho do livro "${b.title}"${b.author?` de ${b.author}`:''}. As falas estão marcadas como ⟦n⟧…⟦/n⟧. Para cada fala marcada, diga quem fala.
-
-Regras:
-- Use as pistas do texto: verbos de elocução (disse, perguntou, respondeu, murmurou), nomes citados, a alternância natural das falas num diálogo e o contexto.
-- Se não tiver certeza razoável de quem fala, responda null. É muito melhor null do que atribuir a fala à pessoa errada.
-- Se o trecho marcado não for fala de personagem (citação, título, ênfase entre aspas, pensamento do narrador), responda "narrador".
-- Reaproveite os ids do elenco já conhecido. Crie um personagem novo só para quem fala neste trecho. ids curtos, minúsculos, sem acento.
-- Não reescreva, não resuma e não comente o texto.
-
-Elenco já conhecido: ${JSON.stringify(castBrief())}
-${ctx ? `\nContexto anterior (sem marcações):\n${ctx}\n` : ''}
-Trecho:
-${lines.join('\n')}
-
-Responda só com JSON neste formato:
-{${first ? '"narrador":{"genero":"feminino|masculino|indefinido","pessoa":"primeira|terceira"},' : ''}"personagens":[{"id":"helena","nome":"Helena","genero":"feminino|masculino|indefinido","idade":"criança|jovem|adulta|idosa|indefinida","descricao":"até 8 palavras sobre jeito de falar"}],"falas":{"1":"helena","2":null,"3":"narrador"}}
-Em "personagens" liste só personagens novos. Em "falas" inclua todos os números de 1 a ${k}.`;
-    const res = await A.sample.json(prompt, { modelTier:'default' });
-    const labels = {}, cast = A.meta.cast || (A.meta.cast = {});
-    let added = false;
-    if (first && res && res.narrador){ A.meta.narrator.gender = res.narrador.genero || ''; A.meta.narrator.pessoa = res.narrador.pessoa || 'terceira'; }
-    for (const p of (res && Array.isArray(res.personagens) ? res.personagens : [])){
-      const id = String(p.id || p.nome || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9_-]/g,'').slice(0,40);
-      if (!id || cast[id] || id === 'narrador' || id === 'narr') continue;
-      cast[id] = { name: String(p.nome || id).slice(0,60), gender: p.genero || 'indefinido', age: p.idade || 'indefinida', desc: String(p.descricao || '').slice(0,120), voice:'', pitch:1, rate:1 };
-      added = true;
-    }
-    const falas = (res && res.falas) || {};
-    for (let n = 1; n <= k; n++){
-      const v = falas[n] ?? falas[String(n)];
-      labels[map[n]] = v === 'narrador' ? 'narr' : (v && cast[v] ? v : null);
-    }
-    Object.assign(A.labels, labels);
+    const chap = chapOf(blk.start);
+    const res = await A.sample.json(blockPrompt(blk, lines, k), { modelTier:'default' });
+    const { labels, emo, nulls, added } = readFalas(res, map, k, chap);
+    Object.assign(A.labels, labels); Object.assign(A.emo, emo);
     A.blocks[blk.id] = true;
-    try { await ref.set({ labels, at:Date.now() }); } catch {}
+    try { await ref.set({ labels, emo, v:2, at:Date.now() }); } catch {}
     if (added || !A.meta.narrator.voice) await suggestVoices(false);
     else saveMeta();
+    // segunda conferência, em segundo plano, quando muitas falas ficaram sem dono
+    if (nulls >= 3 && nulls / k > 0.15) recheckBlock(blk, lines, k, map, labels, chap).catch(() => {});
   })();
   A.pending[blk.id] = job;
   try { await job; } finally { delete A.pending[blk.id]; }
+}
+async function recheckBlock(blk, lines, k, map, labels, chap){
+  const bookId = S.cur;
+  const miss = Object.entries(map).filter(([,key]) => !labels[key]).map(([n]) => n);
+  const extra = `\n\nAtenção: numa primeira leitura, estas falas ficaram sem dono: ${miss.join(', ')}. Releia o diálogo inteiro com calma, acompanhando quem está em cena e a alternância, e decida quem fala em cada uma. Use null só se for realmente impossível saber.`;
+  const res = await A.sample.json(blockPrompt(blk, lines, k, extra), { modelTier:'deep' });
+  if (S.cur !== bookId) return;
+  const only = new Set(miss.map(n => map[n]));
+  const r2 = readFalas(res, map, k, chap, only);
+  const fixed = Object.fromEntries(Object.entries(r2.labels).filter(([,v]) => v));
+  if (!Object.keys(fixed).length) return;
+  Object.assign(A.labels, fixed); Object.assign(A.emo, r2.emo);
+  try {
+    const ref = S.db.doc(`audio/${bookId}/blk/${blk.id}`); const s = await ref.get(); const d = s.exists ? s.data() : {};
+    if (d.manual) return; // a leitora já corrigiu à mão: não mexe
+    await ref.set({ labels:{ ...(d.labels || labels), ...fixed }, emo:{ ...(d.emo || {}), ...r2.emo }, v:2, at:Date.now(), rechecked:true });
+  } catch {}
+  if (r2.added) await suggestVoices(false); else saveMeta();
+  paintAb();
 }
 
 async function suggestVoices(all){
@@ -1551,8 +1688,8 @@ async function suggestVoices(all){
   if (!A.sample || !A.voices.length){ fallback(); saveMeta(); return; }
   A.busy = 'Escolhendo as vozes do elenco…'; paintAb();
   const vlist = A.voices.map(v => `- ${v.name} | ${v.lang} | voz ${vGender(v)} | ${vNatural(v) ? 'natural' : 'sintética, soa robótica'}`).join('\n');
-  const chars = Object.entries(cast).map(([id,c]) => ({ id, nome:c.name, genero:c.gender, idade:c.age, descricao:c.desc, ...(c.voice && !(all ? !c.fixed : !c.voice) ? { fixo:true, voz:c.voice, tom:c.pitch, ritmo:c.rate } : {}) }));
-  const prompt = `Escolha as vozes do elenco de um audiobook dramatizado do livro "${book(S.cur).title}". Use exatamente os nomes de voz da lista.
+  const chars = Object.entries(cast).map(([id,c]) => ({ id, nome:c.name, genero:c.gender, idade:c.age, descricao:c.desc, ...(c.temper ? { temperamento:c.temper } : {}), ...(c.narrates ? { narra_capitulos:true } : {}), ...(c.voice && !(all ? !c.fixed : !c.voice) ? { fixo:true, voz:c.voice, tom:c.pitch, ritmo:c.rate } : {}) }));
+  const prompt = `Escolha as vozes do elenco de um audiobook dramatizado. Use exatamente os nomes de voz da lista.
 
 Vozes disponíveis:
 ${vlist}
@@ -1562,7 +1699,8 @@ Personagens: ${JSON.stringify(chars)}
 
 Regras:
 - Narrador: a voz natural em português do Brasil mais agradável para narrar, do gênero adequado se o narrador for personagem (primeira pessoa).
-- Personagens principais com vozes diferentes do narrador e entre si sempre que possível. Quando faltar voz, repita uma voz mudando tom (0.75 a 1.3) e ritmo (0.85 a 1.15) para diferenciar.
+- Personagens com "narra_capitulos" narram capítulos inteiros em primeira pessoa: são as vozes principais do livro. Dê a eles as melhores vozes naturais do gênero certo, bem diferentes entre si e da voz do Narrador.
+- Demais personagens com vozes diferentes do narrador e entre si sempre que possível. Use temperamento e jeito de falar para ajustar tom e ritmo. Quando faltar voz, repita uma voz mudando tom (0.75 a 1.3) e ritmo (0.85 a 1.15) para diferenciar.
 - Combine gênero e idade: crianças com tom mais alto (1.2 a 1.35); idosos com tom mais baixo (0.8 a 0.9) e ritmo mais lento (0.88 a 0.95).
 - Vozes de Portugal (pt-PT) têm sotaque europeu: use para personagens portugueses ou para diferenciar secundários.
 - Evite vozes sintéticas, a menos que faltem opções.
@@ -1620,6 +1758,14 @@ async function speakAt(idx){
   }
   A.idx = idx;
   const u = A.units[idx];
+  if (A.chap > (A.meta.maxChap || 0)){ A.meta.maxChap = A.chap; saveMeta(); }
+  if (A.meta.mode === 'drama' && !(A.meta.plan?.v >= PLAN_V) && A.sample && !(A.planFailAt && Date.now() - A.planFailAt < 600000)){
+    A.waiting = true; paintAb();
+    try { await ensurePlan(); }
+    catch (e) { A.planFailAt = Date.now(); console.warn('[marginalia] análise inicial falhou', e); toast(e?.code === 'rate_limited' ? 'A IA está no limite agora. Sigo sem a análise dos capítulos.' : 'Não consegui analisar os capítulos agora. Sigo assim mesmo.'); }
+    A.waiting = false; A.busy = '';
+    if (!A.playing || A.idx !== idx) return;
+  }
   if (A.meta.mode === 'drama'){
     const blk = blockOf(u.pi);
     if (!A.blocks[blk.id]){
@@ -1643,12 +1789,17 @@ async function speakAt(idx){
   let text = t.slice(u.a, u.b);
   if (u.key) text = text.replace(/^[\s—–-]+/, '');
   if (!text.trim()) return speakAt(idx + 1);
-  const sp = A.meta.mode === 'drama' && u.key ? A.labels[u.key] : null;
+  let sp = null;
+  if (A.meta.mode === 'drama'){
+    if (S.paras[u.pi].h) sp = 'narr';
+    else { sp = u.key ? (A.labels[u.key] ?? null) : null; if (!sp || sp === 'narr') sp = narrFor(u.pi); } // narração em 1ª pessoa: voz de quem narra o capítulo
+  }
   const cfg = speakerCfg(sp);
+  const fx = A.meta.mode === 'drama' && u.key ? EMO_FX[A.emo[u.key]] : null;
   const ut = new SpeechSynthesisUtterance(text);
   const v = findVoice(cfg.voice) || findVoice(A.meta.narrator.voice) || defaultNarrator();
   if (v){ ut.voice = v; ut.lang = v.lang; } else ut.lang = 'pt-BR';
-  ut.rate = Math.min(3, (cfg.rate || 1) * A.speed); ut.pitch = cfg.pitch || 1;
+  ut.rate = Math.min(3, (cfg.rate || 1) * A.speed * (fx?.r || 1)); ut.pitch = Math.min(2, (cfg.pitch || 1) * (fx?.p || 1)); if (fx) ut.volume = fx.v;
   ut.onend = () => { if (A.cur !== ut) return; A.lastFinishedUnit = { pi:u.pi, a:u.a, b:u.b, text: t.slice(u.a, u.b) }; if (!A.playing) return; if (compAfterUnit(u, idx)) return; speakAt(idx + 1); };
   ut.onerror = ev => { if (A.cur !== ut) return; if (ev.error === 'interrupted' || ev.error === 'canceled') return; A.playing = false; paintAb(); toast('A voz parou: ' + ev.error); };
   A.cur = ut; syn.speak(ut); A.comp.uStart = Date.now();
@@ -1692,8 +1843,8 @@ function paintAb(){
   const chip = $('#ab-who');
   chip.hidden = !drama;
   if (drama){
-    const sp = u && u.key ? (A.labels[u.key] ?? null) : null;
-    const opts = [['narr','Narrador'], ...Object.entries(A.meta.cast || {}).map(([id,c]) => [id, c.name])];
+    const sp = u ? (S.paras[u.pi]?.h ? 'narr' : (u.key && A.labels[u.key] && A.labels[u.key] !== 'narr' ? A.labels[u.key] : narrFor(u.pi))) : null;
+    const opts = [['narr','Narrador'], ...visibleCast().map(([id,c]) => [id, c.name])];
     chip.innerHTML = opts.map(([id,n]) => `<option value="${id}">${esc(n)}</option>`).join('');
     chip.value = sp || 'narr';
     chip.disabled = !(u && u.key);
@@ -1737,7 +1888,7 @@ function renderStart(){
     <p class="lede">Escolha como este livro vai ser narrado. Dá para mudar depois.</p>
     <div class="modes">
       <button class="mode" data-mode="drama" ${canDrama?'':'disabled'}>
-        <b>Dramatizado</b><span>Um narrador e uma voz para cada personagem. A IA identifica quem fala e sugere as vozes que combinam.</span>
+        <b>Dramatizado</b><span>Uma voz para cada personagem. A IA descobre quem narra cada capítulo e quem fala cada fala, e sugere as vozes que combinam.</span>
         ${canDrama?'':'<em>Precisa da IA, que não está disponível agora.</em>'}
       </button>
       <button class="mode" data-mode="simple"><b>Simples</b><span>Uma única voz lê o livro inteiro. Começa na hora.</span></button>
@@ -1748,13 +1899,14 @@ function voiceOptions(sel){
   return A.voices.map(v => `<option value="${esc(v.name)}"${v.name===sel?' selected':''}>${esc(vShort(v.name))}${vNatural(v)?'':' (sintética)'}</option>`).join('');
 }
 function castRow(id, c, isNarr){
-  const tags = isNarr ? [c.pessoa === 'primeira' ? 'narra em 1ª pessoa' : 'narra em 3ª pessoa', c.gender].filter(x => x && !/indefinid/.test(x)) : [c.gender, c.age].filter(x => x && !/indefinid/.test(x));
+  const tags = isNarr ? [A.meta?.plan && Object.keys(A.meta.plan.pov || {}).length ? 'títulos e trechos em 3ª pessoa' : (c.pessoa === 'primeira' ? 'narra em 1ª pessoa' : c.pessoa === 'terceira' ? 'narra em 3ª pessoa' : '')].filter(Boolean) : [c.narrates ? 'narra capítulos' : '', c.gender, c.age].filter(x => x && !/indefinid/.test(x));
+  const about = isNarr ? '' : [c.temper, c.desc].filter(Boolean).join(' · ');
   return `<div class="crow" data-id="${id}">
     <div class="chead">
       ${isNarr ? '<b class="cname">Narrador</b>' : `<input class="cname" data-f="name" value="${esc(c.name)}" aria-label="Nome do personagem">`}
       <button class="ib cprev" data-prev="${id}" aria-label="Ouvir prévia">${ICON_PLAY}</button>
     </div>
-    ${tags.length || c.desc ? `<div class="ctags">${tags.map(t=>`<span>${esc(t)}</span>`).join('')}${c.desc?`<em>${esc(c.desc)}</em>`:''}</div>` : ''}
+    ${tags.length || about ? `<div class="ctags">${tags.map(t=>`<span>${esc(t)}</span>`).join('')}${about?`<em>${esc(about)}</em>`:''}</div>` : ''}
     <label class="cfield">Voz<select data-f="voice">${voiceOptions(c.voice)}</select></label>
     <div class="csl">
       <label>Tom <input type="range" min="0.6" max="1.5" step="0.05" value="${c.pitch||1}" data-f="pitch"></label>
@@ -1765,7 +1917,8 @@ function castRow(id, c, isNarr){
 function renderCast(){
   const m = A.meta; if (!m) return;
   const drama = m.mode === 'drama';
-  const cast = Object.entries(m.cast || {});
+  const cast = visibleCast();
+  const hiddenN = Object.keys(m.cast || {}).length - cast.length;
   $('#ab-sheet-body').innerHTML = `
     <h3>${drama ? 'Elenco' : 'Voz'}</h3>
     <div class="seg mode-seg" role="group" aria-label="Tipo de audiobook">
@@ -1775,7 +1928,8 @@ function renderCast(){
     ${castRow('narr', m.narrator, true)}
     ${drama ? (cast.length ? cast.map(([id,c]) => castRow(id, c, false)).join('') : `<p class="fine">Os personagens aparecem aqui conforme a IA encontra as falas de cada trecho. Dê play para começar.</p>`) : ''}
     ${drama ? `<div class="cacts"><button class="btn-s" id="ab-add">Adicionar personagem</button>${cast.length && A.sample ? '<button class="btn-s" id="ab-resuggest">Sugerir vozes de novo</button>' : ''}</div>` : ''}
-    <p class="fine">Vozes geradas por computador. Elas mudam de tom e ritmo, mas não de emoção.</p>`;
+    ${drama && hiddenN > 0 ? `<p class="fine">${hiddenN === 1 ? 'Um personagem ainda não apareceu' : hiddenN + ' personagens ainda não apareceram'} até onde você ouviu. ${hiddenN === 1 ? 'Ele aparece' : 'Eles aparecem'} aqui quando você chegar lá.</p>` : ''}
+    <p class="fine">Vozes geradas por computador. Quando o livro é narrado em primeira pessoa, a narração usa a voz de quem narra cada capítulo. Nas falas com emoção marcada (sussurro, grito, choro…), o ritmo, o tom e o volume se ajustam.</p>`;
 }
 function cfgFor(id){ return id === 'narr' ? A.meta.narrator : A.meta.cast[id]; }
 function preview(id){
@@ -1829,7 +1983,7 @@ $('#ab-who').onchange = async e => {
   const u = A.units[A.idx]; if (!u || !u.key) return;
   const v = e.target.value; A.labels[u.key] = v;
   const blk = blockOf(u.pi);
-  try { const ref = S.db.doc(`audio/${S.cur}/blk/${blk.id}`); const s = await ref.get(); const labels = { ...(s.exists ? s.data().labels : {}), [u.key]: v }; await ref.set({ labels, at:Date.now(), manual:true }); } catch {}
+  try { const ref = S.db.doc(`audio/${S.cur}/blk/${blk.id}`); const s = await ref.get(); const d = s.exists ? s.data() : {}; const labels = { ...(d.labels || {}), [u.key]: v }; await ref.set({ ...d, labels, at:Date.now(), manual:true }); } catch {}
   toast(`Fala atribuída a ${speakerName(v)}`);
   if (A.playing) speakAt(A.idx);
 };
@@ -2150,6 +2304,8 @@ function passage(from, to, max){
 function povNote(pi){
   const ch = A.chapters[chapOf(pi)];
   const first = A.meta?.narrator?.pessoa === 'primeira';
+  const povId = A.meta?.plan?.pov?.[chapOf(pi)], povName = povId && A.meta.cast?.[povId]?.name;
+  if (povName) return `Capítulo atual: "${ch?.label || ''}". Este capítulo é narrado em primeira pessoa por ${povName}: o "eu" do texto é ${povName}. Falas marcadas como [Nome] indicam quem fala, segundo a análise de vozes (pode errar; na dúvida, confie no texto).`;
   return `Capítulo atual: "${ch?.label || ''}".${first ? ' O livro é narrado em primeira pessoa e o "eu" muda conforme o capítulo: confira no título do capítulo e no próprio texto quem é o "eu" antes de citar alguém.' : ''} Falas marcadas como [Nome] indicam quem fala, segundo a análise de vozes (pode errar; na dúvida, confie no texto).`;
 }
 function charsBrief(){
@@ -2339,7 +2495,7 @@ chips.addEventListener('click', e => { const b = e.target.closest('[data-reply]'
 /* ---- names she mentions: find what the read text says about them ---- */
 function knownNames(){
   const n = new Set(Object.keys(C.doc?.chars || {}));
-  Object.values(A.meta?.cast || {}).forEach(c => c.name && n.add(c.name));
+  if (A.meta) visibleCast().forEach(([,c]) => c.name && n.add(c.name));
   return [...n];
 }
 function mentions(q, lim){

@@ -305,7 +305,7 @@
         r = await fetch(`${CFG.url}/functions/v1/ai`, {
           method: 'POST',
           headers: { Authorization: 'Bearer ' + tok, apikey: CFG.key, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt: String(prompt), tier: opts.modelTier === 'default' ? 'default' : 'quick' }),
+          body: JSON.stringify({ prompt: String(prompt), tier: ['deep', 'default'].includes(opts.modelTier) ? opts.modelTier : 'quick' }),
           signal: opts.signal
         });
       } catch (e) {
