@@ -300,19 +300,27 @@
     async json(prompt, opts = {}) {
       const { data } = await sb.auth.getSession();
       const tok = (data.session || session).access_token;
-      let r;
+      const tier = ['deep', 'default'].includes(opts.modelTier) ? opts.modelTier : 'quick';
+      // Tempo limite: um pedido que se perdeu no caminho não pode travar a leitura
+      const ctl = new AbortController();
+      const timer = setTimeout(() => ctl.abort(), tier === 'deep' ? 150000 : 70000);
+      if (opts.signal) { if (opts.signal.aborted) ctl.abort(); else opts.signal.addEventListener('abort', () => ctl.abort(), { once: true }); }
+      let r, j;
       try {
         r = await fetch(`${CFG.url}/functions/v1/ai`, {
           method: 'POST',
           headers: { Authorization: 'Bearer ' + tok, apikey: CFG.key, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt: String(prompt), tier: ['deep', 'default'].includes(opts.modelTier) ? opts.modelTier : 'quick' }),
-          signal: opts.signal
+          body: JSON.stringify({ prompt: String(prompt), tier }),
+          signal: ctl.signal
         });
+        j = await r.json().catch(() => ({}));
       } catch (e) {
-        if (e && e.name === 'AbortError') throw e;
-        const err = new Error('sem conexão'); err.code = 'network'; throw err;
+        clearTimeout(timer);
+        if (opts.signal && opts.signal.aborted) throw e;
+        const err = new Error(e && e.name === 'AbortError' ? 'a IA demorou demais' : 'sem conexão');
+        err.code = e && e.name === 'AbortError' ? 'timeout' : 'network'; throw err;
       }
-      const j = await r.json().catch(() => ({}));
+      clearTimeout(timer);
       if (!r.ok || !j.ok) {
         const err = new Error(j.error || 'erro da IA');
         // 'not_granted' faria o site desligar a Maggie de vez; sessão vencida não é motivo para isso

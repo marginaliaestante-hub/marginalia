@@ -1527,10 +1527,10 @@ async function ensurePlan(){
   if (A.planJob) return A.planJob;
   A.planJob = (async () => {
     A.busy = 'Conhecendo o livro e quem narra cada capítulo…'; paintAb();
-    const chs = A.chapters.map((c,n) => ({ n, titulo: c.title ? c.title.slice(0,80) : '', abertura: chapterOpening(c, 1100) }))
+    const chs = A.chapters.map((c,n) => ({ n, titulo: c.title ? c.title.slice(0,80) : '', abertura: chapterOpening(c, 500) }))
       .filter(x => x.abertura.length > 40);
     const batches = []; let cur = [], len = 0;
-    for (const x of chs){ const l = x.abertura.length + x.titulo.length + 40; if (len + l > 70000 && cur.length){ batches.push(cur); cur = []; len = 0; } cur.push(x); len += l; }
+    for (const x of chs){ const l = x.abertura.length + x.titulo.length + 40; if (len + l > 40000 && cur.length){ batches.push(cur); cur = []; len = 0; } cur.push(x); len += l; }
     if (cur.length) batches.push(cur);
     const plan = { v:PLAN_V, at:Date.now(), pov:{}, tipo:'' };
     const planPrompt = bt => {
@@ -1557,13 +1557,17 @@ Responda só com JSON:
 Em "capitulos" inclua todos os números listados.`;
     };
     // Se o filtro do Google bloquear algum trecho, divide o lote ao meio até isolar o capítulo problemático
-    const runBatch = async bt => {
-      try { return [await A.sample.json(planPrompt(bt), { modelTier:'deep' })]; }
+    const deadline = Date.now() + 120000; let anyBlocked = false;
+    const runBatch = async (bt, depth = 0) => {
+      if (Date.now() > deadline) return [];
+      try { return [await A.sample.json(planPrompt(bt), { modelTier:'default' })]; }
       catch (e) {
         if (e?.code === 'rate_limited') throw e;
-        if (bt.length < 2) return [];
+        if (e?.code !== 'blocked') return [];
+        anyBlocked = true;
+        if (bt.length < 2 || depth >= 4) return [];
         const h = Math.ceil(bt.length / 2);
-        return [...await runBatch(bt.slice(0, h)), ...await runBatch(bt.slice(h))];
+        return [...await runBatch(bt.slice(0, h), depth + 1), ...await runBatch(bt.slice(h), depth + 1)];
       }
     };
     let got = 0;
@@ -1576,7 +1580,7 @@ Em "capitulos" inclua todos os números listados.`;
         if (Number.isFinite(n) && real) plan.pov[n] = real;
       }
     }
-    if (!got) throw { code:'ai_error' };
+    if (!got && !anyBlocked) throw { code:'ai_error' };
     // Capítulo cujo título é o nome de um personagem (comum em livros com narradoras alternadas)
     A.chapters.forEach((c, n) => { if (plan.pov[n] || !c.title) return; const id = findByName(c.title.trim()); if (id && slugId(c.title).length >= 3) plan.pov[n] = id; });
     for (const [n,id] of Object.entries(plan.pov)){ const c = A.meta.cast[id]; if (c){ c.narrates = true; if (c.firstChap == null || +n < c.firstChap) c.firstChap = +n; } }
@@ -1613,6 +1617,7 @@ function blockPrompt(blk, lines, k, extra){
     ? `Este capítulo é narrado em primeira pessoa por ${povC.name} (id "${pov}"): o "eu" do texto é ${povC.name}. Quando a narradora fala em voz alta ("eu digo", "pergunto", "respondo"), a fala é de ${povC.name}.`
     : (A.meta.narrator?.pessoa === 'terceira' ? 'Este capítulo é narrado em terceira pessoa.' : 'Se houver um "eu" narrador, descubra pelo texto quem é; as falas em voz alta do "eu" são dele.');
   const ctx = blk.start > ch.start ? P.slice(Math.max(ch.start, blk.start - 6), blk.start).map(x => x.t).join('\n') : '';
+  const askEu = !povC && A.meta.narrator?.pessoa !== 'terceira';
   return `Você é diretor(a) de um audiobook dramatizado em português. As falas do trecho estão marcadas como ⟦n⟧…⟦/n⟧. Para cada fala marcada, diga quem fala e, se o texto indicar, com que emoção.
 
 Capítulo: "${ch?.label || ''}". ${povLine}
@@ -1632,8 +1637,42 @@ Trecho:
 ${lines.join('\n')}
 
 Responda só com JSON neste formato:
-{"personagens":[{"id":"helena","nome":"Helena","apelidos":[],"genero":"feminino|masculino|indefinido","idade":"criança|jovem|adulta|idosa|indefinida","temperamento":"até 8 palavras","jeito_de_falar":"até 8 palavras"}],"falas":{"1":{"q":"helena","e":"sussurro"},"2":{"q":null},"3":{"q":"narrador"}}}
+{${askEu ? '"eu":"id de quem é o \\"eu\\" narrador deste trecho, ou null se não houver",' : ''}"personagens":[{"id":"helena","nome":"Helena","apelidos":[],"genero":"feminino|masculino|indefinido","idade":"criança|jovem|adulta|idosa|indefinida","temperamento":"até 8 palavras","jeito_de_falar":"até 8 palavras"}],"falas":{"1":{"q":"helena","e":"sussurro"},"2":{"q":null},"3":{"q":"narrador"}}}
 Em "personagens" liste só personagens novos. Em "falas" inclua todos os números de 1 a ${k}.${extra || ''}`;
+}
+function rangeLines(r){
+  const P = S.paras, map = {}, lines = []; let k = 0;
+  for (let pi = r.start; pi <= r.end; pi++){
+    const t = P[pi].t; let s = '';
+    for (const sg of segPara(t)){ const piece = t.slice(sg.a, sg.b); if (sg.sp){ k++; map[k] = `${pi}:${sg.a}`; s += `⟦${k}⟧${piece}⟦/${k}⟧`; } else s += piece; }
+    lines.push(s);
+  }
+  return { map, lines, k };
+}
+// Analisa um intervalo de parágrafos; se o filtro do Google bloquear, tenta as duas metades separadas
+async function analyzeRange(r, chap, depth = 0){
+  const { map, lines, k } = rangeLines(r);
+  if (!k) return { labels:{}, emo:{}, nulls:0, added:false, k:0, parts:[] };
+  try {
+    const res = await A.sample.json(blockPrompt(r, lines, k), { modelTier:'default' });
+    const out = readFalas(res, map, k, chap);
+    out.k = k; out.parts = [{ r, lines, k, map }];
+    if (res?.eu && narrFor(r.start) === 'narr' && A.meta.narrator?.pessoa !== 'terceira'){
+      const real = A.meta.cast[slugId(res.eu)] ? slugId(res.eu) : findByName(res.eu);
+      if (real){ const pl = A.meta.plan || (A.meta.plan = { v:PLAN_V, at:Date.now(), pov:{}, tipo:'' }); pl.pov = pl.pov || {}; pl.pov[chap] = real; A.meta.cast[real].narrates = true; if ((A.meta.cast[real].firstChap ?? chap) > chap) A.meta.cast[real].firstChap = chap; out.added = true; }
+    }
+    return out;
+  } catch (e) {
+    if (e?.code !== 'blocked' || r.end - r.start < 1 || depth >= 2) throw e;
+    const mid = Math.floor((r.start + r.end) / 2);
+    const halves = [{ ...r, start:r.start, end:mid }, { ...r, start:mid + 1, end:r.end }];
+    const out = { labels:{}, emo:{}, nulls:0, added:false, k:0, parts:[] };
+    for (const h of halves){
+      try { const o = await analyzeRange(h, chap, depth + 1); Object.assign(out.labels, o.labels); Object.assign(out.emo, o.emo); out.nulls += o.nulls; out.added = out.added || o.added; out.k += o.k; out.parts.push(...o.parts); }
+      catch (e2) { if (e2?.code === 'rate_limited') throw e2; } // metade bloqueada: fica com a voz de quem narra
+    }
+    return out;
+  }
 }
 async function ensureBlock(blk){
   if (A.blocks[blk.id]) return;
@@ -1644,33 +1683,28 @@ async function ensureBlock(blk){
       const s = await ref.get();
       if (s.exists){ const d = s.data(); if (d.v >= 2 || d.manual){ Object.assign(A.labels, d.labels || {}); Object.assign(A.emo, d.emo || {}); A.blocks[blk.id] = true; return; } }
     } catch {}
-    const P = S.paras, map = {}, lines = []; let k = 0;
-    for (let pi = blk.start; pi <= blk.end; pi++){
-      const t = P[pi].t; let s = '';
-      for (const sg of segPara(t)){ const piece = t.slice(sg.a, sg.b); if (sg.sp){ k++; map[k] = `${pi}:${sg.a}`; s += `⟦${k}⟧${piece}⟦/${k}⟧`; } else s += piece; }
-      lines.push(s);
-    }
-    if (!k){ A.blocks[blk.id] = true; try { await ref.set({ labels:{}, emo:{}, v:2, at:Date.now() }); } catch {} return; }
+    if (!rangeLines(blk).k){ A.blocks[blk.id] = true; try { await ref.set({ labels:{}, emo:{}, v:2, at:Date.now() }); } catch {} return; }
     if (!A.sample) throw { code:'not_granted' };
     const chap = chapOf(blk.start);
-    const res = await A.sample.json(blockPrompt(blk, lines, k), { modelTier:'default' });
-    const { labels, emo, nulls, added } = readFalas(res, map, k, chap);
+    const { labels, emo, nulls, added, k, parts } = await analyzeRange(blk, chap);
     Object.assign(A.labels, labels); Object.assign(A.emo, emo);
     A.blocks[blk.id] = true;
     try { await ref.set({ labels, emo, v:2, at:Date.now() }); } catch {}
     if (added || !A.meta.narrator.voice) await suggestVoices(false);
     else saveMeta();
     // segunda conferência, em segundo plano, quando muitas falas ficaram sem dono
-    if (nulls >= 3 && nulls / k > 0.15) recheckBlock(blk, lines, k, map, labels, chap).catch(() => {});
+    if (k && nulls >= 3 && nulls / k > 0.15) for (const pt of parts) recheckBlock(blk, pt, labels, chap).catch(() => {});
   })();
   A.pending[blk.id] = job;
   try { await job; } finally { delete A.pending[blk.id]; }
 }
-async function recheckBlock(blk, lines, k, map, labels, chap){
+async function recheckBlock(blk, pt, labels, chap){
+  const { lines, k, map } = pt;
   const bookId = S.cur;
   const miss = Object.entries(map).filter(([,key]) => !labels[key]).map(([n]) => n);
   const extra = `\n\nAtenção: numa primeira leitura, estas falas ficaram sem dono: ${miss.join(', ')}. Releia o diálogo inteiro com calma, acompanhando quem está em cena e a alternância, e decida quem fala em cada uma. Use null só se for realmente impossível saber.`;
-  const res = await A.sample.json(blockPrompt(blk, lines, k, extra), { modelTier:'deep' });
+  if (!miss.length) return;
+  const res = await A.sample.json(blockPrompt(pt.r, lines, k, extra), { modelTier:'deep' });
   if (S.cur !== bookId) return;
   const only = new Set(miss.map(n => map[n]));
   const r2 = readFalas(res, map, k, chap, only);
