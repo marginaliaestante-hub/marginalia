@@ -367,6 +367,31 @@
       }
       if (window.MARGINALIA_DEBUG) console.log('[marginalia] IA respondeu com', j.model);
       return j.data;
+    },
+    // Voz da Maggie: o intermediário fabrica o áudio com o Gemini TTS e devolve um arquivo de som
+    async tts(text, opts = {}) {
+      const { data } = await sb.auth.getSession();
+      const tok = (data.session || session).access_token;
+      const ctl = new AbortController(); const timer = setTimeout(() => ctl.abort(), 50000);
+      let r, j;
+      try {
+        r = await fetch(`${CFG.url}/functions/v1/ai`, {
+          method: 'POST', signal: ctl.signal,
+          headers: { Authorization: 'Bearer ' + tok, apikey: CFG.key, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tts: String(text), voice: opts.voice || 'Laomedeia' })
+        });
+        j = await r.json().catch(() => ({}));
+      } catch (e) { clearTimeout(timer); const err = new Error('sem voz agora'); err.code = 'network'; throw err; }
+      clearTimeout(timer);
+      if (!r.ok || !j.ok) { const err = new Error(j.error || 'sem voz'); err.code = j.code || 'ai_error'; throw err; }
+      const bin = Uint8Array.from(atob(j.audio), c => c.charCodeAt(0));
+      if (/wav|mpeg|mp3|ogg|webm/i.test(j.mime)) return new Blob([bin], { type: j.mime });
+      // PCM cru (audio/L16): acrescenta o cabeçalho WAV
+      const rate = +((j.mime.match(/rate=(\d+)/) || [])[1] || 24000);
+      const h = new DataView(new ArrayBuffer(44)), w = (o, s) => [...s].forEach((c, i) => h.setUint8(o + i, c.charCodeAt(0)));
+      w(0, 'RIFF'); h.setUint32(4, 36 + bin.length, true); w(8, 'WAVE'); w(12, 'fmt '); h.setUint32(16, 16, true); h.setUint16(20, 1, true); h.setUint16(22, 1, true);
+      h.setUint32(24, rate, true); h.setUint32(28, rate * 2, true); h.setUint16(32, 2, true); h.setUint16(34, 16, true); w(36, 'data'); h.setUint32(40, bin.length, true);
+      return new Blob([h.buffer, bin], { type: 'audio/wav' });
     }
   };
 

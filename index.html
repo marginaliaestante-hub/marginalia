@@ -603,7 +603,7 @@ input.cname:focus{outline:none;box-shadow:0 1px 0 var(--accent)}
 
 <script src="vendor/supabase-2.117.3.js"></script>
 <script src="config.js?v=2"></script>
-<script src="marginalia-cloud.js?v=6"></script>
+<script src="marginalia-cloud.js?v=7"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
@@ -1856,7 +1856,7 @@ function follow(u){
   else { const pg = S.paras[u.pi]?.p; if (pg && pg !== S.pdfPage) pdfGo(pg); }
   S.para = u.pi; persist();
 }
-function stopSpeech(){ A.cur = null; try { syn.cancel(); } catch {} }
+function stopSpeech(){ A.cur = null; try { syn.cancel(); } catch {} try { if (MV.audio && !MV.audio.paused) MV.audio.pause(); } catch {} }
 async function speakAt(idx){
   stopSpeech();
   if (!A.playing) return;
@@ -2121,15 +2121,43 @@ function assistantVoice(){
   const nar = A.meta?.narrator?.voice;
   return A.voices.find(v => vNatural(v) && v.name !== nar && v.lang === 'pt-BR' && vGender(v) === 'feminina') || A.voices.find(v => v.name !== nar && vNatural(v)) || findVoice(nar) || defaultNarrator();
 }
-function say(text){
+/* ---- voz própria da Maggie (Gemini TTS), com a voz do navegador como reserva ---- */
+const MV = { audio:null, offUntil:0 };
+const ttsCache = new Map();
+const maggieVoiceOn = () => store.get('maggie.tts', true) && Date.now() > MV.offUntil && !!A.sample?.tts;
+function maggieAudio(text){
+  if (!maggieVoiceOn()) return Promise.resolve(null);
+  if (!ttsCache.has(text)){
+    ttsCache.set(text, A.sample.tts(text, { voice: store.get('maggie.voice', 'Laomedeia') }).catch(e => {
+      if (e?.code === 'rate_limited'){ MV.offUntil = Date.now() + 3600e3; console.warn('[marginalia] voz da Maggie no limite; usando a voz do navegador por 1 hora'); }
+      ttsCache.delete(text); return null;
+    }));
+    if (ttsCache.size > 40) ttsCache.delete(ttsCache.keys().next().value);
+  }
+  return ttsCache.get(text);
+}
+function playBlob(blob){
   return new Promise(res => {
+    const a = MV.audio || (MV.audio = new Audio());
+    const url = URL.createObjectURL(blob); let done = false;
+    const fin = ok => { if (done) return; done = true; a.onended = a.onerror = a.onpause = null; URL.revokeObjectURL(url); res(ok); };
+    a.onended = () => fin(true); a.onpause = () => fin(true); a.onerror = () => fin(false);
+    a.src = url; a.play().catch(() => fin(false));
+    setTimeout(() => fin(true), 90000);
+  });
+}
+function say(text){
+  return new Promise(async res => {
     vcMsg(text);
-    if (!syn){ res(); return; }
     stopSpeech();
+    V.speaking = true;
+    const blob = await maggieAudio(text);
+    if (blob && await playBlob(blob)){ V.speaking = false; res(); return; }
+    if (!syn){ V.speaking = false; res(); return; }
     const ut = new SpeechSynthesisUtterance(text); const v = assistantVoice();
     if (v){ ut.voice = v; ut.lang = v.lang; } else ut.lang = 'pt-BR';
-    ut.rate = 1.05; let done = false; const fin = () => { if (!done){ done = true; res(); } };
-    ut.onend = fin; ut.onerror = fin; setTimeout(fin, 12000);
+    ut.rate = 1.05; let done = false; const fin = () => { if (!done){ done = true; V.speaking = false; res(); } };
+    ut.onend = fin; ut.onerror = fin; setTimeout(fin, 15000);
     syn.speak(ut);
   });
 }
@@ -2646,6 +2674,7 @@ async function askCompanion(q){
   C.awaiting = { ...q, turns:[], current:q.q };
   C.doc.stats.asked++;
   paintAb();
+  if (q.reacao) maggieAudio(q.reacao); maggieAudio(q.q);   // fabrica as duas falas ao mesmo tempo
   if (q.reacao) await say(q.reacao);
   if (!C.awaiting) return;
   await say(q.q);
@@ -2792,6 +2821,8 @@ function renderCompMenu(){
   cmenu.innerHTML = `<div class="lbl">Maggie${read ? ' · modo leitura' : ''}</div>
     <div class="cm-opts">${[['off','Desligada'], ...Object.entries(STYLE_LABEL)].map(([k,l]) => `<button class="chip" data-cm="${k}" aria-pressed="${k==='off' ? !on : on && style===k}">${l}</button>`).join('')}</div>
     <p class="cm-note">${read ? (on ? 'Quando você vira a página num momento marcante, ela puxa conversa. Ela só conhece as páginas que você já terminou.' : 'Ligue para a Maggie conversar com você enquanto lê.') : (on ? 'Ela aprende com você: se você pula muito, fala menos; se responde bastante, conversa mais.' : 'Ligue para a Maggie puxar conversa nos momentos marcantes.')}</p>
+    <div class="lbl" style="margin-top:12px">Voz da Maggie</div>
+    <div class="cm-opts"><button class="chip" data-mv="on" aria-pressed="${store.get('maggie.tts', true)}">Natural</button><button class="chip" data-mv="off" aria-pressed="${!store.get('maggie.tts', true)}">Do navegador</button></div>
     ${read ? '<button class="chip cm-talk" data-cm="talk">Conversar agora</button>' : ''}`;
 }
 $('#ab-comp').onclick = e => {
@@ -2803,6 +2834,8 @@ $('#ab-comp').onclick = e => {
 };
 cmenu.addEventListener('click', async e => {
   e.stopPropagation();
+  const mv = e.target.closest('[data-mv]');
+  if (mv){ const on = mv.dataset.mv === 'on'; store.set('maggie.tts', on); MV.offUntil = 0; renderCompMenu(); say(on ? 'Oi! Essa é a minha voz de verdade.' : 'Tudo bem, vou usar a voz do navegador.'); return; }
   const b = e.target.closest('[data-cm]'); if (!b) return;
   if (!C.doc) await compLoad();
   const k = b.dataset.cm;

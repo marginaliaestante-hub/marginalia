@@ -46,7 +46,7 @@ async function userFrom(req: Request) {
 }
 
 // ---------- escolha de modelos (descoberta automática, guardada por algumas horas) ----------
-type Chains = { quick: string[]; default: string[]; deep: string[]; at: number };
+type Chains = { quick: string[]; default: string[]; deep: string[]; tts: string[]; at: number };
 let chains: Chains | null = null;
 const ver = (name: string) => {
   const m = name.match(/(\d+(?:\.\d+)?)/); return m ? parseFloat(m[1]) : 0;
@@ -74,7 +74,10 @@ async function getChains(key: string): Promise<Chains> {
   // O Flash grátis está levando 25 a 50 s por resposta; o Flash-Lite responde em 1 a 2 s com boa qualidade.
   // Por isso os dois níveis começam pelo Flash-Lite e usam o Flash só como reserva.
   // 'deep' (análises feitas em segundo plano, onde a espera não incomoda) usa o Flash primeiro.
-  chains = { quick: [...L, ...G, ...F.slice(0, 1)], default: [...L, ...F.slice(0, 1), ...G], deep: [...F, ...L, ...G], at: Date.now() };
+  // Vozes (TTS): Flash TTS primeiro, Flash-Lite TTS de reserva; prévias só se não houver estáveis
+  const ttsAll = names.filter(n => /tts/i.test(n)).sort((a, b) => (/preview/.test(a) ? 1 : 0) - (/preview/.test(b) ? 1 : 0) || (/lite/.test(a) ? 1 : 0) - (/lite/.test(b) ? 1 : 0) || ver(b) - ver(a));
+  const T = ttsAll.length ? ttsAll.slice(0, 3) : ['gemini-2.5-flash-preview-tts'];
+  chains = { quick: [...L, ...G, ...F.slice(0, 1)], default: [...L, ...F.slice(0, 1), ...G], deep: [...F, ...L, ...G], tts: T, at: Date.now() };
   return chains;
 }
 
@@ -156,6 +159,41 @@ Deno.serve(async (req) => {
 
   let input: any;
   try { input = await req.json(); } catch { return json(req, { ok: false, code: 'bad_request' }, 400); }
+
+  // ---------- voz da Maggie (Gemini TTS) ----------
+  if (input?.tts) {
+    const text = String(input.tts).slice(0, 1200).trim();
+    if (!text) return json(req, { ok: false, code: 'bad_request' }, 400);
+    const voice = /^[A-Za-z]{3,20}$/.test(input.voice || '') ? input.voice : 'Laomedeia';
+    const style = typeof input.style === 'string' ? input.style.slice(0, 200).trim() : '';
+    let lastErr = '', sawLimit = false;
+    for (const model of ch.tts) {
+      const until = cooldown.get(model);
+      if (until && until > Date.now()) { sawLimit = true; continue; }
+      const body: any = {
+        contents: [{ role: 'user', parts: [{ text: style ? `${style}: ${text}` : text }] }],
+        generationConfig: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } } },
+      };
+      const ctl = new AbortController(); const timer = setTimeout(() => ctl.abort(), 45_000);
+      try {
+        const r = await fetch(`${GEMINI}/models/${model}:generateContent`, { method: 'POST', headers: { 'x-goog-api-key': key, 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: ctl.signal });
+        clearTimeout(timer);
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) {
+          lastErr = `${model}: ${r.status} ${j?.error?.message || ''}`.slice(0, 300);
+          console.warn('[ai] tts', lastErr);
+          if (r.status === 429) { sawLimit = true; cooldown.set(model, Date.now() + (/per.?day|daily|PerDay/i.test(lastErr) ? 3600e3 : 60e3)); }
+          continue;
+        }
+        const part = (j?.candidates?.[0]?.content?.parts || []).find((p: any) => p.inlineData?.data);
+        if (!part) { lastErr = `${model}: sem áudio (${j?.candidates?.[0]?.finishReason || j?.promptFeedback?.blockReason || '?'})`; console.warn('[ai] tts', lastErr); continue; }
+        return json(req, { ok: true, audio: part.inlineData.data, mime: part.inlineData.mimeType || 'audio/L16;rate=24000', model, voice });
+      } catch {
+        clearTimeout(timer); lastErr = `${model}: demorou demais`; console.warn('[ai] tts', lastErr);
+      }
+    }
+    return json(req, { ok: false, code: sawLimit ? 'rate_limited' : 'ai_error', error: lastErr }, sawLimit ? 429 : 502);
+  }
   const prompt = String(input?.prompt || '');
   if (!prompt || prompt.length > 200_000) return json(req, { ok: false, code: 'bad_request' }, 400);
   const tier: 'quick' | 'default' | 'deep' = input?.tier === 'deep' ? 'deep' : input?.tier === 'default' ? 'default' : 'quick';
