@@ -168,7 +168,16 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 .lk-sec{display:flex;flex-direction:column;gap:8px}
 .lk-row{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:13px}
 .lk-row output{font-variant-numeric:tabular-nums;color:var(--rmuted);font-size:12px;min-width:44px;text-align:right}
-.lk-row input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
+.lk-row input[type=range]{flex:1;min-width:0}
+/* controles deslizantes desenhados por nós (os do navegador saíam quadrados em alguns temas) */
+.rd input[type=range]{-webkit-appearance:none;appearance:none;height:22px;background:transparent;margin:0;padding:0;cursor:pointer;--p:50%}
+.rd input[type=range]:focus{outline:none}
+.rd input[type=range]::-webkit-slider-runnable-track{height:4px;border-radius:99px;background:linear-gradient(to right,var(--accent) var(--p),color-mix(in srgb,var(--pink) 20%,transparent) var(--p))}
+.rd input[type=range]::-moz-range-track{height:4px;border-radius:99px;background:color-mix(in srgb,var(--pink) 20%,transparent)}
+.rd input[type=range]::-moz-range-progress{height:4px;border-radius:99px;background:var(--accent)}
+.rd input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:16px;height:16px;border-radius:50%;background:var(--accent);margin-top:-6px;border:2px solid var(--paper);box-shadow:0 1px 3px rgba(0,0,0,.35)}
+.rd input[type=range]::-moz-range-thumb{width:13px;height:13px;border-radius:50%;background:var(--accent);border:2px solid var(--paper);box-shadow:0 1px 3px rgba(0,0,0,.35)}
+.rd input[type=range]:focus-visible::-webkit-slider-thumb{box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 35%,transparent)}
 .lk-row>span:first-child{min-width:92px}
 .themes{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
 .themes button{display:flex;flex-direction:column;align-items:center;gap:4px;background:none;border:0;padding:0;color:var(--rmuted);font-size:10.5px;line-height:1.1}
@@ -235,7 +244,7 @@ html.flip-fwd::view-transition-old(root),html.flip-fwd::view-transition-new(root
 .rd-msg{position:absolute;inset:0;display:grid;place-items:center;text-align:center;color:var(--rmuted);font-family:var(--f-display);font-size:22px;font-style:italic;padding:24px}
 .rd-foot{position:absolute;left:0;right:0;bottom:0;z-index:4;padding:0 max(20px,env(safe-area-inset-left,0px)) calc(14px + env(safe-area-inset-bottom,0px));display:flex;align-items:center;gap:14px;font-size:12px;color:var(--rmuted);font-variant-numeric:tabular-nums;opacity:0;transition:opacity .28s ease;pointer-events:none}
 .rd.chrome .rd-foot{opacity:1;pointer-events:auto}
-.rd-foot input{flex:1;accent-color:var(--accent)}
+.rd-foot input{flex:1}
 
 .pdfv{position:absolute;inset:0;overflow:auto;padding:calc(20px + env(safe-area-inset-top,0px)) 12px 40px;display:flex;flex-direction:column;align-items:center;gap:16px;background:color-mix(in srgb,var(--pink) 6%,var(--paper))}
 .pdfv[hidden]{display:none}
@@ -346,7 +355,7 @@ input.cname:focus{outline:none;box-shadow:0 1px 0 var(--accent)}
 .cfield select{min-width:0;width:100%;background:transparent;color:var(--pink);border:1px solid color-mix(in srgb,var(--pink) 16%,transparent);border-radius:10px;padding:7px 8px;font:inherit;font-size:13px}
 .csl{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .csl label{display:flex;flex-direction:column;gap:2px;font-size:12px;color:var(--rmuted)}
-.csl input{accent-color:var(--accent);width:100%}
+.csl input{width:100%}
 .cacts{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
 .btn-s{border:1px solid color-mix(in srgb,var(--pink) 18%,transparent);background:none;color:var(--pink);border-radius:999px;padding:7px 14px;font-size:13px;font-weight:500}
 .rd .seg button:disabled{opacity:.4}
@@ -384,8 +393,8 @@ input.cname:focus{outline:none;box-shadow:0 1px 0 var(--accent)}
 .ab.reading #ab-mic{display:inline-flex}
 .comp-menu .lbl{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--rmuted);font-weight:600}
 .cm-opts{display:flex;flex-wrap:wrap;gap:6px}
-.comp-menu .chip{background:transparent;color:var(--pink);border-color:color-mix(in srgb,var(--pink) 18%,transparent)}
-.comp-menu .chip[aria-pressed="true"]{background:var(--pink);color:var(--paper);border-color:var(--pink)}
+.comp-menu .chip,.rd .chip{background:transparent;color:var(--pink);border-color:color-mix(in srgb,var(--pink) 18%,transparent)}
+.comp-menu .chip[aria-pressed="true"],.rd .chip[aria-pressed="true"]{background:var(--pink);color:var(--paper);border-color:var(--pink)}
 .cm-note{margin:0;font-size:12px;color:var(--rmuted);line-height:1.5}
 .jn-sub{font-size:13px;color:var(--muted)}
 .journal{columns:3 230px;column-gap:22px}
@@ -1265,7 +1274,7 @@ function goPage(n, instant){
   let i = 0; for (let k = 0; k < S.pageOf.length; k++){ if (S.pageOf[k] <= n) i = k; else break; }
   const first = S.pageOf.findIndex(p => p === n);
   S.para = first >= 0 ? first : i;
-  $('#r-slider').value = n;
+  $('#r-slider').value = n; paintRange($('#r-slider'));
   paintPageLabel();
   if (LOOK.theme === 'foco' && !A.playing) focusPara(S.pageTop?.[n]?.o === 0 ? S.pageTop[n].pi : (S.pageOf.findIndex(p => p === n) >= 0 ? S.pageOf.findIndex(p => p === n) : S.para));
   const pct = Math.round(((n+1) / S.pages) * 100);
@@ -1405,7 +1414,7 @@ function pdfGo(n){
 function setPdfPage(n){
   const prevPdf = S.pdfPage;
   S.pdfPage = n; const tot = S.pdf?.numPages || 1;
-  $('#r-slider').value = n - 1; $('#r-page').textContent = `pág. ${n} de ${tot}`; $('#r-pct').textContent = Math.round(n/tot*100)+'%';
+  $('#r-slider').value = n - 1; paintRange($('#r-slider')); $('#r-page').textContent = `pág. ${n} de ${tot}`; $('#r-pct').textContent = Math.round(n/tot*100)+'%';
   persist();
   readTurn('pdf', prevPdf, n);
 }
@@ -1446,6 +1455,12 @@ document.addEventListener('keydown', e => {
   else if (e.key === 'Escape'){ if (!$('#pop').hidden) hidePop(); else if ($('#drawer').classList.contains('open')) $('#drawer').classList.remove('open'); else if (!document.fullscreenElement) closeReader(); }
 });
 rd.addEventListener('mousemove', e => { if (e.clientY < 70 && !rd.classList.contains('chrome')) flashChrome(); });
+/* preenchimento dos controles deslizantes */
+function paintRange(el){ const mn = +el.min || 0, mx = +el.max || 100, v = +el.value; el.style.setProperty('--p', (mx > mn ? (v - mn) / (mx - mn) * 100 : 0) + '%'); }
+function paintRanges(root){ (root || rd).querySelectorAll('input[type=range]').forEach(paintRange); }
+document.addEventListener('input', e => { if (e.target.matches?.('.rd input[type=range]')) paintRange(e.target); }, true);
+new MutationObserver(muts => { for (const m of muts) if (m.addedNodes.length){ paintRanges(m.target.nodeType === 1 ? m.target : rd); } }).observe(rd, { childList:true, subtree:true });
+
 /* ================= Aparência do livro ================= */
 const THEMES = [
   ['original', 'Original', '#FBF8F3', '#2B2420'], ['papel', 'Papel', '#F3EDDF', '#33291F'], ['sepia', 'Sépia', '#F2E7D0', '#4A3A28'],
@@ -1723,7 +1738,7 @@ const ICON_PAUSE = '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6.5" y
 (async () => { try { A.sample = (window.claude && claude.use) ? await claude.use('sample') : null; } catch { A.sample = null; } })();
 
 /* ---- voices ---- */
-const FEM = /francisca|thalita|luciana|fernanda|leila|yara|brenda|giovanna|manuela|elza|maria|raquel|fernanda|joana|catarina|helena|camila|vitoria|vitória|leticia|letícia/i;
+const FEM = /google portugu[eê]s|luciana|francisca|thalita|luciana|fernanda|leila|yara|brenda|giovanna|manuela|elza|maria|raquel|fernanda|joana|catarina|helena|camila|vitoria|vitória|leticia|letícia/i;
 const MASC = /ant[oô]nio|felipe|daniel|donato|fabio|fábio|humberto|julio|júlio|nicolau|valerio|valério|duarte|ricardo|macerio|thiago|cristiano/i;
 const vGender = v => FEM.test(v.name) ? 'feminina' : MASC.test(v.name) ? 'masculina' : 'indefinida';
 const vNatural = v => /natural|online|premium|enhanced|neural/i.test(v.name);
@@ -2119,19 +2134,34 @@ async function recheckBlock(blk, pt, labels, chap){
   paintAb();
 }
 
-async function suggestVoices(all){
+async function suggestVoices(all, reset){
   const m = A.meta, cast = m.cast || {};
+  // "Sugerir vozes de novo": a leitora quer tudo escolhido outra vez, inclusive o que ela já tinha mexido
+  if (reset){ m.narrator.fixed = false; for (const c of Object.values(cast)){ c.fixed = false; c.voice = ''; } }
   const need = Object.entries(cast).filter(([,c]) => all ? !c.fixed : !c.voice);
   const fallback = () => { // deterministic casting when Claude is not available
     const nat = A.voices.filter(vNatural).length ? A.voices.filter(vNatural) : A.voices;
     if (!m.narrator.voice) m.narrator.voice = defaultNarrator()?.name || '';
-    let fi = 0, mi = 0;
-    for (const [,c] of need){
-      if (c.voice && findVoice(c.voice)) continue;
-      const pool = nat.filter(v => v.name !== m.narrator.voice && (c.gender?.startsWith('f') ? vGender(v)==='feminina' : c.gender?.startsWith('m') ? vGender(v)==='masculina' : true));
-      const list = pool.length ? pool : nat; const n = c.gender?.startsWith('f') ? fi++ : mi++;
-      const v = list[n % list.length]; c.voice = v?.name || ''; c.pitch = 1 + (Math.floor(n / Math.max(1,list.length)) * (c.gender?.startsWith('f') ? .12 : -.1)); c.rate = 1;
-      if (c.age === 'criança') c.pitch = Math.min(1.35, c.pitch + .25); if (c.age === 'idosa') { c.pitch = Math.max(.75, c.pitch - .12); c.rate = .9; }
+    // a voz menos usada do gênero certo; quando faltar voz, a mesma voz com tom e ritmo diferentes
+    const used = {}; const use = n => { used[n] = (used[n] || 0) + 1; };
+    if (m.narrator.voice) use(m.narrator.voice);
+    for (const [, c] of Object.entries(cast)) if (c.voice && findVoice(c.voice) && !need.some(([, x]) => x === c)) use(c.voice);
+    const main = need.filter(([, c]) => c.narrates).concat(need.filter(([, c]) => !c.narrates));
+    for (const [, c] of main){
+      if (c.voice && findVoice(c.voice)) { use(c.voice); continue; }
+      const g = c.gender?.startsWith('f') ? 'feminina' : c.gender?.startsWith('m') ? 'masculina' : '';
+      let pool = nat.filter(v => !g || vGender(v) === g);
+      if (!pool.length) pool = A.voices.filter(v => !g || vGender(v) === g);
+      if (!pool.length) pool = A.voices.filter(v => vGender(v) !== (g === 'feminina' ? 'masculina' : g === 'masculina' ? 'feminina' : '__'));
+      if (!pool.length) pool = nat;
+      const v = pool.slice().sort((a, b) => (used[a.name] || 0) - (used[b.name] || 0) || (b.lang === 'pt-BR') - (a.lang === 'pt-BR'))[0];
+      const k = used[v?.name] || 0; c.voice = v?.name || ''; use(c.voice);
+      const steps = [0, 1, -1, 2, -2, 3];
+      c.pitch = Math.min(1.35, Math.max(.75, 1 + steps[k % steps.length] * (g === 'masculina' ? .08 : .1)));
+      c.rate = [1, 1.06, .94, 1.1, .9, 1.03][k % 6];
+      if (c.age === 'criança') c.pitch = Math.min(1.35, c.pitch + .2);
+      if (/idos/.test(c.age || '')) { c.pitch = Math.max(.75, c.pitch - .12); c.rate = .9; }
+      if (/jovem|adolesc/.test(c.age || '') && g === 'feminina') c.pitch = Math.min(1.35, c.pitch + .06);
     }
   };
   if (!A.sample || !A.voices.length){ fallback(); saveMeta(); return; }
@@ -2153,6 +2183,7 @@ Regras:
 - Combine gênero e idade: crianças com tom mais alto (1.2 a 1.35); idosos com tom mais baixo (0.8 a 0.9) e ritmo mais lento (0.88 a 0.95).
 - Vozes de Portugal (pt-PT) têm sotaque europeu: use para personagens portugueses ou para diferenciar secundários.
 - Evite vozes sintéticas, a menos que faltem opções.
+- NUNCA dê voz masculina a personagem feminina, nem feminina a personagem masculino. Se houver poucas vozes de um gênero, repita a mesma voz desse gênero com tom e ritmo diferentes.
 - Mantenha como estão os itens marcados "fixo".
 
 Responda só com JSON:
@@ -2161,7 +2192,13 @@ Responda só com JSON:
     const r = await A.sample.json(prompt, { purpose:'vozes-escolha', modelTier:'quick', cache:false });
     const clamp = (x, lo, hi, d) => { x = Number(x); return isFinite(x) ? Math.min(hi, Math.max(lo, x)) : d; };
     if (r?.narrador && !m.narrator.fixed && findVoice(r.narrador.voz)){ m.narrator.voice = r.narrador.voz; m.narrator.pitch = clamp(r.narrador.tom,.7,1.4,1); m.narrator.rate = clamp(r.narrador.ritmo,.8,1.2,1); }
-    for (const [id,c] of need){ const s = r?.personagens?.[id]; if (s && findVoice(s.voz)){ c.voice = s.voz; c.pitch = clamp(s.tom,.7,1.4,1); c.rate = clamp(s.ritmo,.8,1.2,1); } }
+    for (const [id,c] of need){
+      const s = r?.personagens?.[id], v = s && findVoice(s.voz);
+      // voz masculina para personagem feminina (ou o contrário): descarta e deixa a escolha automática resolver
+      const g = c.gender?.startsWith('f') ? 'feminina' : c.gender?.startsWith('m') ? 'masculina' : '';
+      if (v && g && vGender(v) !== 'indefinida' && vGender(v) !== g) continue;
+      if (v){ c.voice = s.voz; c.pitch = clamp(s.tom,.7,1.4,1); c.rate = clamp(s.ritmo,.8,1.2,1); }
+    }
   } catch (e) { if (e?.code === 'not_granted') A.sample = null; }
   fallback(); // fills anything still empty
   A.busy = ''; saveMeta(); paintAb(); if (!sheet.hidden && sheet.dataset.view === 'cast') renderCast();
@@ -2381,6 +2418,7 @@ function renderCast(){
     ${drama ? (cast.length ? cast.map(([id,c]) => castRow(id, c, false)).join('') : `<p class="fine">Os personagens aparecem aqui conforme a IA encontra as falas de cada trecho. Dê play para começar.</p>`) : ''}
     ${drama ? `<div class="cacts"><button class="btn-s" id="ab-add">Adicionar personagem</button>${cast.length && A.sample ? '<button class="btn-s" id="ab-resuggest">Sugerir vozes de novo</button>' : ''}</div>` : ''}
     ${drama && hiddenN > 0 ? `<p class="fine">${hiddenN === 1 ? 'Um personagem ainda não apareceu' : hiddenN + ' personagens ainda não apareceram'} até onde você ouviu. ${hiddenN === 1 ? 'Ele aparece' : 'Eles aparecem'} aqui quando você chegar lá.</p>` : ''}
+    ${drama && !A.voices.some(vNatural) ? `<p class="fine" style="margin-top:10px"><b>Este navegador só tem ${A.voices.length} ${A.voices.length === 1 ? 'voz' : 'vozes'} em português, todas sintéticas</b>, então os personagens repetem vozes com tom e ritmo diferentes. No <b>Microsoft Edge</b> aparecem vozes naturais (Francisca, Antonio, Thalita e outras), muito melhores para o audiobook.</p>` : ''}
     <div class="lbl" style="margin-top:14px">Perguntar “ainda está aí?” a cada</div>
     <div class="cm-opts sleep-opts">${[[0,'Nunca'],[15,'15 min'],[30,'30 min'],[60,'1 hora']].map(([m,l]) => `<button class="chip" data-sleep="${m}" aria-pressed="${sleepMin() === m}">${l}</button>`).join('')}</div>
     <p class="fine">Sem resposta em 45 segundos, o audiobook pausa onde parou.</p>
@@ -2408,7 +2446,7 @@ $('#ab-sheet-body').addEventListener('click', async e => {
   const sm = e.target.closest('[data-setmode]');
   if (sm && !sm.disabled){ A.meta.mode = sm.dataset.setmode; saveMeta(); renderCast(); paintAb(); return; }
   const pv = e.target.closest('[data-prev]'); if (pv){ preview(pv.dataset.prev); return; }
-  if (e.target.id === 'ab-resuggest'){ e.target.disabled = true; e.target.textContent = 'Escolhendo…'; await suggestVoices(true); return; }
+  if (e.target.id === 'ab-resuggest'){ e.target.disabled = true; e.target.textContent = 'Escolhendo…'; await suggestVoices(true, true); toast('Vozes escolhidas de novo. Toque no ▶ de cada um para ouvir.'); return; }
   if (e.target.id === 'ab-add'){
     let n = 1; while (A.meta.cast['p' + n]) n++;
     A.meta.cast['p' + n] = { name:`Personagem ${n}`, gender:'indefinido', age:'indefinida', desc:'', voice: A.voices.find(v => vNatural(v) && v.name !== A.meta.narrator.voice)?.name || '', pitch:1, rate:1, fixed:true };
