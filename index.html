@@ -1882,6 +1882,7 @@ async function speakAt(idx){
     A.playing = false; paintAb(); toast('Fim do livro'); return;
   }
   A.idx = idx;
+  if (sleepDue()){ askStillThere(); return; }
   const u = A.units[idx];
   if (A.chap > (A.meta.maxChap || 0)){ A.meta.maxChap = A.chap; saveMeta(); }
   if (A.meta.mode === 'drama' && !(A.meta.plan?.v >= PLAN_V) && A.sample && !(A.planFailAt && Date.now() - A.planFailAt < 600000)){
@@ -1940,7 +1941,7 @@ function startFromHere(){
   let idx = A.units.findIndex(u => u.pi > pi || (u.pi === pi && u.b > a));
   A.idx = idx < 0 ? 0 : idx;
 }
-function play(){ if (!A.meta) return; if (V.hold){ V.hold = false; vcBox.classList.remove('listening'); } if (!A.units.length) startFromHere(); if (!A.comp.from && A.units[A.idx]) compStartFrom(A.units[A.idx].pi); const wb = welcomeBack(); if (wb){ A.playing = true; paintAb(); say(wb).then(() => { if (A.playing) speakAt(A.idx); }); return; } A.playing = true; speakAt(A.idx); }
+function play(){ if (!A.meta) return; SLEEP.last = Date.now(); if (V.hold){ V.hold = false; vcBox.classList.remove('listening'); } if (!A.units.length) startFromHere(); if (!A.comp.from && A.units[A.idx]) compStartFrom(A.units[A.idx].pi); const wb = welcomeBack(); if (wb){ A.playing = true; paintAb(); say(wb).then(() => { if (A.playing) speakAt(A.idx); }); return; } A.playing = true; speakAt(A.idx); }
 function pause(){ A.playing = false; stopSpeech(); paintAb(); }
 function step(d){
   if (!A.units.length) startFromHere();
@@ -2055,6 +2056,9 @@ function renderCast(){
     ${drama ? (cast.length ? cast.map(([id,c]) => castRow(id, c, false)).join('') : `<p class="fine">Os personagens aparecem aqui conforme a IA encontra as falas de cada trecho. Dê play para começar.</p>`) : ''}
     ${drama ? `<div class="cacts"><button class="btn-s" id="ab-add">Adicionar personagem</button>${cast.length && A.sample ? '<button class="btn-s" id="ab-resuggest">Sugerir vozes de novo</button>' : ''}</div>` : ''}
     ${drama && hiddenN > 0 ? `<p class="fine">${hiddenN === 1 ? 'Um personagem ainda não apareceu' : hiddenN + ' personagens ainda não apareceram'} até onde você ouviu. ${hiddenN === 1 ? 'Ele aparece' : 'Eles aparecem'} aqui quando você chegar lá.</p>` : ''}
+    <div class="lbl" style="margin-top:14px">Perguntar “ainda está aí?” a cada</div>
+    <div class="cm-opts sleep-opts">${[[0,'Nunca'],[15,'15 min'],[30,'30 min'],[60,'1 hora']].map(([m,l]) => `<button class="chip" data-sleep="${m}" aria-pressed="${sleepMin() === m}">${l}</button>`).join('')}</div>
+    <p class="fine">Sem resposta em 45 segundos, o audiobook pausa onde parou.</p>
     <p class="fine">Vozes geradas por computador. Quando o livro é narrado em primeira pessoa, a narração usa a voz de quem narra cada capítulo. Nas falas com emoção marcada (sussurro, grito, choro…), o ritmo, o tom e o volume se ajustam.</p>`;
 }
 function cfgFor(id){ return id === 'narr' ? A.meta.narrator : A.meta.cast[id]; }
@@ -2074,6 +2078,8 @@ $('#ab-sheet-body').addEventListener('click', async e => {
     A.meta = { mode, narrator:{ voice: v?.name || '', pitch:1, rate:1 }, cast:{} };
     saveMeta(true); sheet.hidden = true; showPlayer(); play(); return;
   }
+  const sl = e.target.closest('[data-sleep]');
+  if (sl){ store.set('sleep.min', +sl.dataset.sleep); awake(); renderCast(); toast(+sl.dataset.sleep ? `Vou perguntar a cada ${sl.textContent}.` : 'Timer de sono desligado.'); return; }
   const sm = e.target.closest('[data-setmode]');
   if (sm && !sm.disabled){ A.meta.mode = sm.dataset.setmode; saveMeta(); renderCast(); paintAb(); return; }
   const pv = e.target.closest('[data-prev]'); if (pv){ preview(pv.dataset.prev); return; }
@@ -2466,7 +2472,37 @@ Responda só com JSON: {"inicio": número da primeira frase, "fim": número da �
   await say(`É este trecho? ${preview.length > 260 ? preview.slice(0, 257) + '…' : preview} Diga sim ou não.`);
   vcMsg('É este trecho? Diga “sim” ou “não”.');
 }
+/* ---- "Ainda está aí?": timer de sono do audiobook ---- */
+// A cada N minutos de áudio sem nenhum sinal da leitora, a Maggie pergunta. Sem resposta, o audiobook pausa ali.
+const SLEEP = { last: Date.now(), timer: null };
+const sleepMin = () => +store.get('sleep.min', 15);
+function sleepDue(){ return A.playing && sleepMin() > 0 && !V.pending && !C.awaiting && Date.now() - SLEEP.last > sleepMin() * 60000; }
+function awake(){ SLEEP.last = Date.now(); }
+['pointerdown', 'keydown', 'touchstart'].forEach(ev => document.addEventListener(ev, awake, { capture:true, passive:true }));
+async function askStillThere(){
+  stopSpeech(); A.playing = false;
+  V.hold = true; V.wasPlaying = true; vcBox.classList.add('listening');
+  V.pending = { kind:'awake' };
+  paintAb();
+  await say('Ainda está aí? Se estiver, toque em “Estou aqui” ou diga sim.');
+  if (V.pending?.kind !== 'awake') return;
+  showChips(['Estou aqui'], true); vcMsg('Ainda está aí?', 60000);
+  clearTimeout(SLEEP.timer);
+  SLEEP.timer = setTimeout(() => {
+    if (V.pending?.kind !== 'awake') return;
+    V.pending = null; hideChips();
+    V.hold = false; V.wasPlaying = false; vcBox.classList.remove('listening');
+    A.playing = false; paintAb();
+    vcMsg('Pausei aqui porque você não respondeu. Durma bem!', 3600e3);
+    toast('Audiobook pausado: você não respondeu ao “ainda está aí?”.');
+  }, 45000);
+}
 async function answerPending(raw){
+  if (V.pending.kind === 'awake'){
+    clearTimeout(SLEEP.timer); V.pending = null; hideChips(); awake();
+    await say('Que bom! Seguindo.');
+    releaseHold(true); return;
+  }
   const n = norm(stripWake(raw));
   if (V.pending.kind === 'confirm'){
     const { c, target } = V.pending;
@@ -2774,8 +2810,8 @@ function compSave(now){
 
 /* ---- quick replies ---- */
 const chips = $('#comp-chips');
-function showChips(list){
-  const opts = [...(list || []), 'Depois'].filter((x, i, a) => a.indexOf(x) === i).slice(0, 4);
+function showChips(list, noLater){
+  const opts = [...(list || []), ...(noLater ? [] : ['Depois'])].filter((x, i, a) => a.indexOf(x) === i).slice(0, 4);
   chips.innerHTML = opts.map(o => `<button class="chip-r" data-reply="${esc(o)}">${esc(o)}</button>`).join('');
   chips.hidden = false;
 }
