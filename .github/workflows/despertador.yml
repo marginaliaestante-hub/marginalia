@@ -1,0 +1,19 @@
+# Despertador do Supabase: o plano grátis pausa o projeto depois de 7 dias sem uso.
+# A cada 3 dias, este robô do GitHub faz uma consulta pequena ao banco para mantê-lo acordado.
+# A chave usada é a "publishable" (pública, a mesma do config.js): ela não vê dados de ninguém.
+name: Despertador do Supabase
+on:
+  schedule:
+    - cron: '17 9 */3 * *'
+  workflow_dispatch:
+jobs:
+  acordar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Consulta pequena ao banco
+        run: |
+          code=$(curl -s -o /dev/null -w '%{http_code}' \
+            'https://lstvdqytityadgqqbdqg.supabase.co/rest/v1/docs?select=path&limit=1' \
+            -H 'apikey: sb_publishable_kY8g53_gMXbwq3nIoeNH5g_c9Bp6CEe')
+          echo "Supabase respondeu: $code"
+          test "$code" = "200"
