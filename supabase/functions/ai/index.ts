@@ -12,6 +12,19 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_ANON = Deno.env.get('SUPABASE_ANON_KEY') || '';
 const PUBLISHABLE = 'sb_publishable_kY8g53_gMXbwq3nIoeNH5g_c9Bp6CEe'; // pública por natureza
 const GEMINI = 'https://generativelanguage.googleapis.com/v1beta';
+const SERVICE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+
+// ---------- registro de uso (só números: modelo, tokens, tempo; nunca o texto) ----------
+type Usage = { owner: string; kind: string; tier?: string; purpose?: string; model?: string; ok: boolean; status?: number; in_tok?: number; out_tok?: number; chars?: number; ms?: number };
+function logUsage(u: Usage) {
+  if (!SERVICE) return;
+  const p = fetch(`${SUPABASE_URL}/rest/v1/ai_usage`, {
+    method: 'POST',
+    headers: { apikey: SERVICE, Authorization: `Bearer ${SERVICE}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+    body: JSON.stringify(u),
+  }).then(r => { if (!r.ok) r.text().then(t => console.warn('[ai] usage log', r.status, t.slice(0, 200))); }).catch(() => {});
+  try { (globalThis as any).EdgeRuntime?.waitUntil?.(p); } catch { /* ok */ }
+}
 
 function geminiKey(): string | null {
   for (const n of ['GEMINI_API_KEY', 'GEMINI_KEY', 'GOOGLE_API_KEY']) {
@@ -98,7 +111,7 @@ const noSafety = new Set<string>();
 // Livros têm violência, palavrão e cenas fortes: os filtros padrão bloqueiam trechos de romance comuns.
 const SAFETY_CATS = ['HARM_CATEGORY_HARASSMENT', 'HARM_CATEGORY_HATE_SPEECH', 'HARM_CATEGORY_SEXUALLY_EXPLICIT', 'HARM_CATEGORY_DANGEROUS_CONTENT'];
 
-async function callModel(key: string, model: string, prompt: string, timeoutMs = 40_000): Promise<{ status: number; error?: string; text?: string }> {
+async function callModel(key: string, model: string, prompt: string, timeoutMs = 40_000): Promise<{ status: number; error?: string; text?: string; inTok?: number; outTok?: number }> {
   const isGemma = model.startsWith('gemma');
   const body: any = {
     contents: [{ role: 'user', parts: [{ text: isGemma ? prompt + '\n\nResponda apenas com o JSON, sem texto antes ou depois.' : prompt }] }],
@@ -136,13 +149,15 @@ async function callModel(key: string, model: string, prompt: string, timeoutMs =
     return callModel(key, model, prompt, timeoutMs);
   }
   if (!r.ok) return { status: r.status, error: j?.error?.message || 'erro' };
+  const um = j?.usageMetadata || {};
+  const inTok = um.promptTokenCount || 0, outTok = (um.candidatesTokenCount || 0) + (um.thoughtsTokenCount || 0);
   const parts = j?.candidates?.[0]?.content?.parts || [];
   const text = parts.filter((p: any) => !p.thought).map((p: any) => p.text || '').join('');
   if (!text) {
     const why = j?.promptFeedback?.blockReason || j?.candidates?.[0]?.finishReason || '?';
-    return { status: /SAFETY|PROHIBITED|BLOCK|OTHER/i.test(why) ? 451 : 502, error: 'resposta vazia (' + why + ')' };
+    return { status: /SAFETY|PROHIBITED|BLOCK|OTHER/i.test(why) ? 451 : 502, error: 'resposta vazia (' + why + ')', inTok, outTok };
   }
-  return { status: 200, text };
+  return { status: 200, text, inTok, outTok };
 }
 
 Deno.serve(async (req) => {
@@ -175,10 +190,14 @@ Deno.serve(async (req) => {
         generationConfig: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } } },
       };
       const ctl = new AbortController(); const timer = setTimeout(() => ctl.abort(), 45_000);
+      const t0 = Date.now();
+      const purpose = typeof input.purpose === 'string' ? input.purpose.slice(0, 30) : 'maggie';
       try {
         const r = await fetch(`${GEMINI}/models/${model}:generateContent`, { method: 'POST', headers: { 'x-goog-api-key': key, 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: ctl.signal });
         clearTimeout(timer);
         const j = await r.json().catch(() => ({}));
+        const um = j?.usageMetadata || {};
+        logUsage({ owner: user.id, kind: 'tts', purpose, model, ok: r.ok, status: r.status, chars: text.length, in_tok: um.promptTokenCount || 0, out_tok: um.candidatesTokenCount || 0, ms: Date.now() - t0 });
         if (!r.ok) {
           lastErr = `${model}: ${r.status} ${j?.error?.message || ''}`.slice(0, 300);
           console.warn('[ai] tts', lastErr);
@@ -189,6 +208,7 @@ Deno.serve(async (req) => {
         if (!part) { lastErr = `${model}: sem áudio (${j?.candidates?.[0]?.finishReason || j?.promptFeedback?.blockReason || '?'})`; console.warn('[ai] tts', lastErr); continue; }
         return json(req, { ok: true, audio: part.inlineData.data, mime: part.inlineData.mimeType || 'audio/L16;rate=24000', model, voice });
       } catch {
+        logUsage({ owner: user.id, kind: 'tts', purpose, model, ok: false, status: 504, chars: text.length, ms: Date.now() - t0 });
         clearTimeout(timer); lastErr = `${model}: demorou demais`; console.warn('[ai] tts', lastErr);
       }
     }
@@ -197,6 +217,7 @@ Deno.serve(async (req) => {
   const prompt = String(input?.prompt || '');
   if (!prompt || prompt.length > 200_000) return json(req, { ok: false, code: 'bad_request' }, 400);
   const tier: 'quick' | 'default' | 'deep' = input?.tier === 'deep' ? 'deep' : input?.tier === 'default' ? 'default' : 'quick';
+  const purpose = typeof input?.purpose === 'string' ? input.purpose.slice(0, 30) : null;
 
   let lastErr = '', sawLimit = false, blocked = false;
   const tried: string[] = [];
@@ -204,7 +225,9 @@ Deno.serve(async (req) => {
     const until = cooldown.get(model);
     if (until && until > Date.now()) { sawLimit = true; continue; }
     for (let attempt = 0; attempt < 2; attempt++) {
+      const t0 = Date.now();
       const res = await callModel(key, model, prompt, tier === 'deep' && !/lite|gemma/.test(model) ? 100_000 : 40_000);
+      logUsage({ owner: user.id, kind: 'text', tier, purpose: purpose || tier, model, ok: res.status === 200, status: res.status, in_tok: res.inTok || 0, out_tok: res.outTok || 0, chars: prompt.length, ms: Date.now() - t0 });
       if (res.status === 200) {
         try { return json(req, { ok: true, data: parseJSON(res.text!), model }); }
         catch { lastErr = 'json_parse'; continue; } // tenta de novo uma vez

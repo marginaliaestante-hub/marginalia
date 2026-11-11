@@ -214,7 +214,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 /* note modal */
 .modal{position:fixed;inset:0;z-index:60;background:rgba(20,10,20,.45);display:grid;place-items:center;padding:20px}
 .modal[hidden]{display:none}
-.note-card{width:min(420px,100%);background:var(--pi-yellow);color:var(--pi-ink);padding:28px 22px 18px;transform:rotate(-1deg);box-shadow:0 30px 60px -20px rgba(0,0,0,.5);position:relative;display:flex;flex-direction:column;gap:12px}
+.note-card{--card:var(--pi-yellow);width:min(420px,100%);background:var(--card);color:var(--pi-ink);padding:28px 22px 18px;transform:rotate(-1deg);box-shadow:0 30px 60px -20px rgba(0,0,0,.5);position:relative;display:flex;flex-direction:column;gap:12px}
 .note-card::before{content:"";position:absolute;top:-10px;left:50%;width:80px;height:22px;transform:translateX(-50%) rotate(2deg);background:rgba(255,255,255,.6)}
 .note-card blockquote{margin:0;font-family:var(--f-book);font-style:italic;font-size:14px;line-height:1.5;max-height:7.5em;overflow:auto;opacity:.85}
 .note-card textarea{background:transparent;border:0;border-top:1px dashed rgba(58,44,48,.3);padding-top:10px;min-height:120px;resize:vertical;font-family:var(--f-hand);font-size:20px;line-height:1.35;color:var(--pi-ink)}
@@ -222,7 +222,9 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 .note-card .acts{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap}
 .note-card .acts button.del{background:none;color:#B4234A;padding-left:4px}
 .note-card .acts button{border:0;background:rgba(58,44,48,.1);border-radius:999px;padding:7px 14px;font-weight:600;font-size:13px;color:var(--pi-ink)}
-.note-card .acts button.save{background:var(--pi-ink);color:var(--pi-yellow)}
+.note-card .acts button.save{background:var(--pi-ink);color:var(--card)}
+.note-card.c-red{--card:var(--pi-red)} .note-card.c-pink{--card:var(--pi-pink)} .note-card.c-green{--card:var(--pi-green)} .note-card.c-blue{--card:var(--pi-blue)} .note-card.c-lilac{--card:var(--pi-lilac)}
+.flow mark.c-red.has-note::after{background:var(--pi-red)} .flow mark.c-green.has-note::after{background:var(--pi-green)} .flow mark.c-blue.has-note::after{background:var(--pi-blue)} .flow mark.c-lilac.has-note::after{background:var(--pi-lilac)} .flow mark.c-pink.has-note::after{background:var(--pi-pink)}
 
 .toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 18px;border-radius:999px;font-size:14px;z-index:90;box-shadow:0 10px 24px -8px var(--shadow)}
 .toast[hidden]{display:none}
@@ -356,6 +358,24 @@ input.cname:focus{outline:none;box-shadow:0 1px 0 var(--accent)}
 .jm-card{position:relative;width:min(560px,100%);max-height:calc(100% - 20px);overflow:auto;background:#FFF9EC;color:#3A2C30;padding:34px 30px 22px;border-radius:3px;box-shadow:0 30px 60px -20px rgba(0,0,0,.5);background-image:repeating-linear-gradient(transparent 0 31px, rgba(140,58,105,.08) 31px 32px)}
 .jm-card::before{content:"";position:absolute;top:-10px;left:50%;width:90px;height:22px;transform:translateX(-50%) rotate(-2deg);background:rgba(214,170,200,.6)}
 .jm-x{position:absolute;top:10px;right:10px;color:#3A2C30}
+.us-card{position:relative;width:min(560px,100%);max-height:calc(100% - 20px);overflow:auto;background:var(--surface);color:var(--ink);padding:26px 24px 20px;border-radius:16px;box-shadow:0 30px 60px -20px rgba(0,0,0,.5)}
+.us-card .jm-x{color:var(--ink)}
+.us-card h2{font-family:var(--f-display);font-weight:400;font-size:28px;margin:0 0 4px}
+.us-card h3{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:20px 0 8px;font-weight:600}
+.us-card .fine{color:var(--muted);font-size:13px;margin:4px 0}
+.us-row{display:grid;grid-template-columns:1fr auto;gap:2px 10px;margin:10px 0;font-size:14px}
+.us-row b{font-weight:600}
+.us-row .n{font-variant-numeric:tabular-nums;color:var(--muted);font-size:13px;text-align:right}
+.us-bar{grid-column:1/-1;height:8px;border-radius:99px;background:var(--line);overflow:hidden}
+.us-bar i{display:block;height:100%;background:var(--accent);border-radius:99px}
+.us-bar i.hot{background:#C4483E}
+.us-days{display:flex;align-items:flex-end;gap:6px;height:90px;margin-top:6px}
+.us-days div{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;font-size:11px;color:var(--muted);height:100%;justify-content:flex-end}
+.us-days span{display:block;width:100%;background:var(--accent);border-radius:4px 4px 0 0;min-height:2px}
+.us-days span.v{background:var(--accent-soft)}
+.us-list{margin:0;padding:0;list-style:none;font-size:14px}
+.us-list li{display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-bottom:1px solid var(--line)}
+.us-list li span:last-child{font-variant-numeric:tabular-nums;color:var(--muted)}
 .jm-date{font-size:11px;letter-spacing:.12em;text-transform:uppercase;opacity:.55;margin-bottom:10px}
 .jm-title{font-family:var(--f-display);font-style:italic;font-weight:400;font-size:38px;line-height:1.05;margin:0 0 8px}
 .jm-phrase{font-family:var(--f-hand);font-size:22px;line-height:1.3;margin:0 0 18px;color:#8C3A69}
@@ -609,13 +629,16 @@ input.cname:focus{outline:none;box-shadow:0 1px 0 var(--accent)}
 <div class="modal" id="jn-modal" hidden>
   <div class="jm-card"><button class="ib jm-x" id="jn-x" aria-label="Fechar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button><div id="jn-body"></div></div>
 </div>
+<div class="modal" id="usage" hidden>
+  <div class="us-card" role="dialog" aria-label="Uso da IA"><button class="ib jm-x" id="us-x" aria-label="Fechar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button><div id="us-body"></div></div>
+</div>
 <div class="toast" id="toast" hidden></div>
 <input type="file" id="f-pdf" accept="application/pdf,.pdf,application/epub+zip,.epub" multiple hidden>
 <input type="file" id="f-img" accept="image/png,image/jpeg,image/webp" hidden>
 
 <script src="vendor/supabase-2.117.3.js"></script>
 <script src="config.js?v=2"></script>
-<script src="marginalia-cloud.js?v=7"></script>
+<script src="marginalia-cloud.js?v=8"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
@@ -1633,7 +1656,7 @@ Em "capitulos" inclua todos os números listados.`;
     const deadline = Date.now() + 120000; let anyBlocked = false;
     const runBatch = async (bt, depth = 0) => {
       if (Date.now() > deadline) return [];
-      try { return [await A.sample.json(planPrompt(bt), { modelTier:'default' })]; }
+      try { return [await A.sample.json(planPrompt(bt), { purpose:'vozes-plano', modelTier:'default' })]; }
       catch (e) {
         if (e?.code === 'rate_limited') throw e;
         if (e?.code !== 'blocked') return [];
@@ -1728,7 +1751,7 @@ async function analyzeRange(r, chap, depth = 0){
   const { map, lines, k } = rangeLines(r);
   if (!k) return { labels:{}, emo:{}, nulls:0, added:false, k:0, parts:[] };
   try {
-    const res = await A.sample.json(blockPrompt(r, lines, k), { modelTier:'default' });
+    const res = await A.sample.json(blockPrompt(r, lines, k), { purpose:'vozes-falas', modelTier:'default' });
     const out = readFalas(res, map, k, chap);
     out.k = k; out.parts = [{ r, lines, k, map }];
     if (res?.eu && narrFor(r.start) === 'narr' && A.meta.narrator?.pessoa !== 'terceira'){
@@ -1779,7 +1802,7 @@ async function recheckBlock(blk, pt, labels, chap){
   const miss = Object.entries(map).filter(([,key]) => !labels[key]).map(([n]) => n);
   const extra = `\n\nAtenção: numa primeira leitura, estas falas ficaram sem dono: ${miss.join(', ')}. Releia o diálogo inteiro com calma, acompanhando quem está em cena e a alternância, e decida quem fala em cada uma. Use null só se for realmente impossível saber.`;
   if (!miss.length) return;
-  const res = await A.sample.json(blockPrompt(pt.r, lines, k, extra), { modelTier:'deep' });
+  const res = await A.sample.json(blockPrompt(pt.r, lines, k, extra), { purpose:'vozes-falas', modelTier:'deep' });
   if (S.cur !== bookId) return;
   const only = new Set(miss.map(n => map[n]));
   const r2 = readFalas(res, map, k, chap, only);
@@ -1834,7 +1857,7 @@ Regras:
 Responda só com JSON:
 {"narrador":{"voz":"nome exato","tom":1,"ritmo":1},"personagens":{"id":{"voz":"nome exato","tom":1,"ritmo":1}}}`;
   try {
-    const r = await A.sample.json(prompt, { modelTier:'quick', cache:false });
+    const r = await A.sample.json(prompt, { purpose:'vozes-escolha', modelTier:'quick', cache:false });
     const clamp = (x, lo, hi, d) => { x = Number(x); return isFinite(x) ? Math.min(hi, Math.max(lo, x)) : d; };
     if (r?.narrador && !m.narrator.fixed && findVoice(r.narrador.voz)){ m.narrator.voice = r.narrador.voz; m.narrator.pitch = clamp(r.narrador.tom,.7,1.4,1); m.narrator.rate = clamp(r.narrador.ritmo,.8,1.2,1); }
     for (const [id,c] of need){ const s = r?.personagens?.[id]; if (s && findVoice(s.voz)){ c.voice = s.voz; c.pitch = clamp(s.tom,.7,1.4,1); c.rate = clamp(s.ritmo,.8,1.2,1); } }
@@ -2313,18 +2336,20 @@ function parseCommand(raw){
   if (/^(pula|pular|avanca|avancar|proxima|próxima)\b/.test(n)) return { act:'next' };
   if (/^(repete|repetir|repita|de novo|volta|voltar)\b/.test(n)) return { act:'repeat' };
   if (/^(cancela|cancelar|esquece|deixa pra la|nada)\b/.test(n)) return { act:'cancel' };
-  if (!/(destac|destaq|grif|marc|salv|post ?it|postit|anot|nota|sublinh)/.test(n)) return { act:'unknown', text };
-  // note: after "anotação/nota/escreva/:" (from the original text, keeping accents and case)
+  if (!/(destac|destaq|grif|marc|salv|post ?it|postit|anot|nota|sublinh|coment)/.test(n)) return { act:'unknown', text };
+  // comentário num grifo que já existe: "comenta no último grifo que…", "coloca na nota do grifo: …"
+  const an = text.match(/^\s*(?:e\s+)?(?:coment\w*|anot\w*|escrev\w*|coloc\w*|p[oõô]e|p[oô]r|bot\w*|adicion\w*|acrescent\w*)\b.{0,40}?\b(?:n[oa]|ao|à)\s+(?:nota\s+d[oa]\s+)?(?:[uú]ltim[oa]\s+|ess[ea]\s+|est[ea]\s+|meu\s+|minha\s+)?(?:grifo|destaque|post ?it|marca[cç][aã]o|trecho\s+grifado)(?:\s+que\s+(?:eu\s+)?fiz)?\s*(?:,?\s*(?:dizendo|falando|escrevendo))?\s*(?:que\s+)?[:,]?\s*(.{2,})$/i);
+  if (an && !/\b(grif[ae]|destaqu?e|marqu?e|sublinh[ae])\s+(?:a|o|est|ess|aquel)/i.test(text.slice(0, an.index + 12))) return { act:'annotate', note: capNote(an[1]) };
+  // note: after "anotação/nota/comentário/escreva/:" (from the original text, keeping accents and case)
   let note = '';
-  const nm = text.match(/(?:com\s+(?:a\s+)?(?:anota[cç][aã]o|nota|observa[cç][aã]o)|(?:e\s+)?anot(?:e|a|ar)(?![a-zçã])(?:\s+que)?|(?:e\s+)?escrev(?:e|a|er)(?![a-z])(?:\s+que)?|(?:a\s+)?anota[cç][aã]o(?:\s+[ée])?|dizendo(?:\s+que)?)\s*[:,]?\s*/i);
+  const nm = text.match(/(?:com\s+(?:a\s+|o\s+|um\s+|uma\s+)?(?:anota[cç][aã]o|nota|observa[cç][aã]o|coment[aá]rio)(?:\s+(?:dizendo|falando))?(?:\s+que)?|(?:e\s+)?(?:coloc(?:a|e|ar)|p[oõ]e|p[oô]r|bot(?:a|e|ar)|adicion(?:a|e|ar)|acrescent(?:a|e|ar)|faz(?:er)?|fa[cç]a)\s+(?:um|uma|o|a)\s+(?:coment[aá]rio|nota|anota[cç][aã]o|post ?it|observa[cç][aã]o)(?:\s+(?:dizendo|falando))?(?:\s+que)?|(?:e\s+)?coment(?:e|a|ar|ando)(?![a-zçã])(?:\s+que)?|(?:e\s+)?anot(?:e|a|ar)(?![a-zçã])(?:\s+que)?|(?:e\s+)?escrev(?:e|a|er)(?![a-z])(?:\s+(?:na\s+nota|no\s+post ?it|no\s+coment[aá]rio))?(?:\s+que)?|(?:o\s+|a\s+|meu\s+|minha\s+)?(?:anota[cç][aã]o|coment[aá]rio|nota)\s*(?:[ée]|:)|dizendo(?:\s+que)?)\s*[:,]?\s*/i);
   let head = text;
   if (nm){ note = text.slice(nm.index + nm[0].length).trim(); head = text.slice(0, nm.index); }
   else {
     const colon = text.indexOf(':');
     if (colon > 0 && /post|nota|parte|aqui/i.test(text.slice(0, colon))){ note = text.slice(colon+1).trim(); head = text.slice(0, colon); }
   }
-  note = note.replace(/^["“'‘]|["”'’]\.?$/g, '').trim();
-  if (note) note = note[0].toUpperCase() + note.slice(1);
+  note = capNote(note);
   // cor dita no fim ("em vermelho", "de raiva") não faz parte da citação
   const headQ = head.replace(/\s*(?:,\s*)?(?:em|de|com|na|no|cor)?\s*(?:a\s+)?(?:cor\s+)?(?:vermelh\w*|azul|verde|rox[oa]|lil[aá]s|violeta|amarel\w*|rosa|raiva|medo|nojo|tristeza|triste|amei)\s*[.!]?\s*$/i, '').trim();
   // trecho maior: "de X até Y"
@@ -2342,15 +2367,19 @@ function parseCommand(raw){
     if (fm && !/^(que voc[eê]|que acabou|anterior|passada|de agora|atual)/i.test(fm[1].trim()) && !/^(ultima|última|essa|esta|aqui)(?![a-zà-ú])/i.test(fm[1].trim())) quote = fm[1];
   }
   const hn = norm(head);
-  let color = 'yellow';
-  for (const [re, cv] of COLOR_WORDS) if (re.test(hn)) { color = cv; break; }
+  let color = 'yellow', colorSet = false;
+  for (const [re, cv] of COLOR_WORDS) if (re.test(hn)) { color = cv; colorSet = true; break; }
   let target = 'last';
   if (/(penultima|frase anterior|antes dessa|antes desta)/.test(hn)) target = 'prev';
   if (isPara) target = 'para';
   if (quote) target = 'quote';
-  if (ds) return { act:'highlight', target:'describe', desc: ds[1].trim(), note, color };
-  if (rg) return { act:'highlight', target:'range', quote: rg[1].trim(), quoteEnd: rg[2].trim(), note, color };
-  return { act:'highlight', target, quote: quote.trim(), note, color };
+  if (ds) return { act:'highlight', target:'describe', desc: ds[1].trim(), note, color, colorSet };
+  if (rg) return { act:'highlight', target:'range', quote: rg[1].trim(), quoteEnd: rg[2].trim(), note, color, colorSet };
+  return { act:'highlight', target, quote: quote.trim(), note, color, colorSet };
+}
+function capNote(t){
+  t = String(t || '').replace(/^["“'‘]|["”'’]\.?$/g, '').replace(/^[\s,:;.-]+/, '').trim();
+  return t ? t[0].toUpperCase() + t.slice(1) : '';
 }
 
 /* ---- Claude fallback for commands the rules did not understand ---- */
@@ -2364,17 +2393,105 @@ Comando: "${text}"
 
 Ações possíveis: "destacar" (grifar um trecho, com ou sem anotação), "continuar", "pausar", "repetir", "pular", "nenhuma".
 Responda só com JSON: {"acao":"destacar|continuar|pausar|repetir|pular|nenhuma","alvo":"ultima|anterior|citacao","citacao":"trecho exato citado, se houver","nota":"texto da anotação, se houver, exatamente como ditado","cor":"yellow (amei) | blue (triste) | red (raiva) | green (nojo) | lilac (medo)"}`;
-  try { return await A.sample.json(prompt, { modelTier:'quick', cache:false }); } catch { return null; }
+  try { return await A.sample.json(prompt, { purpose:'comando', modelTier:'quick', cache:false }); } catch { return null; }
+}
+
+/* ---- revisão do que o microfone ouviu (antes de a Maggie agir) ---- */
+// O ditado do navegador erra nomes e palavras parecidas. A IA conserta pelo contexto do livro
+// e, de quebra, diz o que ela quis: grifar, comentar, conversar, pausar…
+const micFixOn = () => store.get('mic.fix', true);
+function bookNames(){
+  const out = new Set();
+  for (const c of Object.values(A.meta?.cast || {})){ if (c?.name && !/^Personagem \d/.test(c.name)) out.add(c.name); (c?.aliases || []).forEach(a => out.add(a)); }
+  for (const p of Object.values(C.doc?.people || {})) if (p?.nome || p?.name) out.add(p.nome || p.name);
+  return [...out].slice(0, 40);
+}
+async function understand(raw, awaiting){
+  if (!A.sample) return null;
+  const b = S.books.find(x => x.id === S.cur) || {};
+  const lim = readLimit();
+  const recent = lim ? S.paras[lim.pi].t.slice(Math.max(0, lim.b - 450), lim.b) : '';
+  const names = bookNames();
+  const prompt = `Você revisa transcrições do reconhecimento de voz do navegador (pt-BR). Quem fala é uma leitora conversando com a Maggie, a companheira de leitura dela, enquanto lê ou ouve "${b.title || 'um livro'}"${b.author ? ' de ' + b.author : ''}.
+O reconhecimento erra nomes próprios e troca palavras parecidas (exemplos reais: "rezie" → "Reese", "iate" → "Wyatt", "nola" → "Nolan", "gripe" → "grife", "fase" → "frase", "spant" → "espanto").
+${names.length ? 'Nomes deste livro: ' + names.join(', ') + '\n' : ''}Trecho que ela acabou de ler: "${recent.replace(/\s+/g, ' ')}"
+${awaiting ? `A Maggie tinha perguntado: "${awaiting}"\n` : ''}O que o microfone ouviu: "${raw}"
+
+Responda só com JSON:
+{"texto":"o que ela quis dizer, corrigindo SÓ erros de reconhecimento (nomes, palavras trocadas, pontuação). Não resuma, não acrescente ideias, mantenha o jeito dela falar.",
+"eco": true se parecer que o microfone captou a leitura do livro (frases do trecho acima ou narração) e não a fala dela, senão false${awaiting ? '' : `,
+"intencao":"grifar (marcar um trecho, com ou sem comentário) | comentar_grifo (pôr um comentário no grifo que ela acabou de fazer) | continuar | pausar | repetir | pular | cancelar | conversa (comentário ou pergunta para a Maggie)",
+"alvo":"ultima | anterior | paragrafo | citacao | descricao",
+"citacao":"as palavras do livro que ela citou para achar o trecho, se houver",
+"descricao":"se ela descreveu o trecho em vez de citar (ex.: a parte em que ela chora), a descrição",
+"comentario":"o texto do comentário/nota/anotação/observação que ela quer escrever junto do grifo, já corrigido; vazio se não houver",
+"cor":"yellow (amarelo, amei) | blue (azul, triste) | red (vermelho, raiva) | green (verde, nojo) | lilac (roxo, medo) | vazio se ela não disse"`}}`;
+  try { return await A.sample.json(prompt, { purpose: awaiting ? 'revisao-resposta' : 'revisao-comando', modelTier:'quick', cache:false }); } catch { return null; }
+}
+const IMPERATIVE = /^(grif|destac|destaq|marc|sublinh|anot|salv|coloc|poe|por |bota|escrev|coment|adicion|acrescent|faz um|faca um)/;
+function mergeIntent(c, u, text){
+  if (!u || !u.intencao) return c;
+  const it = String(u.intencao).toLowerCase();
+  const simple = { continuar:'play', pausar:'pause', repetir:'repeat', pular:'next', cancelar:'cancel' };
+  if (['play','pause','next','repeat','cancel','annotate'].includes(c.act)) return c;  // comandos curtos: as regras já acertam
+  const color = COLORS.includes(u.cor) ? u.cor : null;
+  const comment = capNote(u.comentario);
+  if (it.startsWith('comentar') && comment) return { act:'annotate', note: comment };
+  if (it === 'grifar'){
+    if (c.act === 'highlight'){
+      if (!c.note && comment) c.note = comment;
+      if (!c.colorSet && color) c.color = color;
+      if (c.target === 'last' || c.target === 'prev'){
+        if (u.alvo === 'citacao' && u.citacao && norm(u.citacao).split(' ').length >= 2){ c.target = 'quote'; c.quote = u.citacao; }
+        else if (u.alvo === 'descricao' && u.descricao){ c.target = 'describe'; c.desc = u.descricao; }
+        else if (u.alvo === 'paragrafo') c.target = 'para';
+      }
+      return c;
+    }
+    const target = u.alvo === 'citacao' && u.citacao ? 'quote' : u.alvo === 'descricao' && u.descricao ? 'describe' : u.alvo === 'paragrafo' ? 'para' : u.alvo === 'anterior' ? 'prev' : 'last';
+    return { act:'highlight', target, quote: u.citacao || '', desc: u.descricao || '', note: comment, color: color || 'yellow', colorSet: !!color };
+  }
+  if (it === 'conversa' && c.act === 'highlight' && !IMPERATIVE.test(norm(text))) return { act:'unknown', text };
+  if (simple[it] && c.act === 'unknown' && norm(text).split(' ').length <= 6) return { act: simple[it] };
+  return c;
+}
+// Comentário no grifo mais recente deste livro
+async function annotateLast(note){
+  const h = S.hls.filter(x => x.bookId === S.cur).sort((a, b) => (b.created || 0) - (a.created || 0))[0];
+  if (!h){ await say('Você ainda não grifou nada neste livro. Diga, por exemplo: grifa essa frase e comenta que…'); releaseHold(true); return; }
+  if (!note){ await say('O que você quer escrever no grifo?'); return; }
+  const v = h.note ? h.note + '\n' + note : note;
+  try { await S.db.doc('highlights/' + h.id).update({ note: v }); }
+  catch { await say('Não consegui salvar o comentário agora.'); return; }
+  const short = h.text.length > 70 ? h.text.slice(0, 67).replace(/\s+\S*$/, '') + '…' : h.text;
+  await say(`Anotei no grifo “${short}”.`);
+  releaseHold(true);
 }
 
 /* ---- run ---- */
-async function runCommand(raw){
+async function runCommand(raw, opts = {}){
   if (V.busy) return; V.busy = true;
   vc.value = ''; clearTimeout(V.timer);
   try {
-    if (C.awaiting) return await compAnswer(raw);
+    // Fala vinda do microfone: revisa a transcrição antes de agir (respostas curtas a "sim/primeiro" não precisam)
+    let u = null;
+    if (opts.voice && micFixOn() && A.sample && !V.pending && norm(stripWake(raw)).split(' ').length >= 2){
+      if (C.awaiting) clearTimeout(answerT);
+      vcMsg('Entendendo…'); $('#ab-status').classList.add('busy');
+      u = await understand(stripWake(raw) || raw, C.awaiting ? (C.awaiting.current || C.awaiting.q || '') : '');
+      if (u && typeof u.texto === 'string' && u.texto.trim()){
+        if (window.MARGINALIA_DEBUG) console.log('[marginalia] microfone:', raw, '→', u.texto);
+        raw = u.texto.trim();
+      }
+    }
+    if (C.awaiting){
+      if (u?.eco === true){ await say('Acho que o microfone pegou a leitura do livro, e não você. Pode repetir a sua resposta?'); armAnswerTimer(); return; }
+      return await compAnswer(raw);
+    }
     if (V.pending) return await answerPending(raw);
-    let c = parseCommand(raw);
+    if (u?.eco === true){ await say('Acho que o microfone ouviu o livro, e não você. Pode repetir?'); return; }
+    let c = mergeIntent(parseCommand(raw), u, raw);
+    if (c.act === 'annotate') return await annotateLast(c.note);
     if (c.act === 'unknown') return await compUserTalk(raw);
     if (c.act === 'unknown_ai'){
       vcMsg('Entendendo o comando…');
@@ -2462,7 +2579,7 @@ Frases:
 ${sents.map((x, i) => `[${i + 1}] ${x.t}`).join('\n')}
 
 Responda só com JSON: {"inicio": número da primeira frase, "fim": número da última frase (pode ser igual a "inicio"; no máximo 6 frases)}. Se nenhuma combinar, responda {"inicio": null}.`;
-  let r = null; try { r = await A.sample.json(prompt, { modelTier:'default' }); } catch {}
+  let r = null; try { r = await A.sample.json(prompt, { purpose:'grifo', modelTier:'default' }); } catch {}
   const i = Number(r?.inicio), j = Number(r?.fim ?? r?.inicio);
   if (!i || !sents[i - 1]){ await say('Não achei esse trecho no que você já leu. Pode citar uma frase dele?'); return; }
   const a = sents[i - 1], b = sents[Math.min(sents.length, Math.max(i, Math.min(j || i, i + 5))) - 1];
@@ -2543,7 +2660,7 @@ vc.addEventListener('input', () => {
   if (!vc.value.trim()){ clearTimeout(V.timer); return; }
   holdForCommand();
   clearTimeout(V.timer);
-  V.timer = setTimeout(() => { if (vc.value.trim()) runCommand(vc.value); }, 1900);
+  V.timer = setTimeout(() => { if (vc.value.trim()) runCommand(vc.value, { voice:true }); }, Math.max(1900, micWait()));
 });
 vc.addEventListener('blur', () => { if (!vc.value.trim() && V.hold && !V.pending && !V.busy) releaseHold(true); });
 function keepFocus(){
@@ -2716,7 +2833,7 @@ Responda só com JSON:
 {"resumo":"o que aconteceu até aqui, em até 150 palavras","ondeParamos":"onde a história parou, em 1 ou 2 frases","personagens":{"Nome":{"idade":"só o número, se o texto disser; senão vazio","papel":"quem é, em até 12 palavras","relacoes":{"mãe":"Nome","pai":"Nome","irmã":"Nome","marido":"Nome","prima":"Nome","amiga":"Nome"}}}}
 Inclua até 15 personagens que já apareceram. Em "relacoes", a chave é o que a outra pessoa é PARA este personagem (para a filha: "mãe":"Emily"). Só relações que o texto deixou claras.`;
   try {
-    const r = await A.sample.json(prompt, { modelTier:'quick', cache:false });
+    const r = await A.sample.json(prompt, { purpose:'maggie-memoria', modelTier:'quick', cache:false });
     if (clean(r?.resumo, 1200)) C.doc.recap = clean(r.resumo, 1200);
     if (clean(r?.ondeParamos, 300)) C.doc.ondeParamos = clean(r.ondeParamos, 300);
     mergeChars(r?.personagens);
@@ -2774,7 +2891,7 @@ Em "personagens" inclua só quem apareceu ou teve informação nova neste trecho
 Formato de "aposta_resolvida" quando houver: {"id":"b123","resultado":"acertou|errou|parcial","comentario":"fala curta lembrando a aposta dela"}`;
     C.calls++;
     const ctl = new AbortController(); const wd = setTimeout(() => ctl.abort(), 90000);
-    let r; try { r = await A.sample.json(prompt, { modelTier:'quick', cache:false, signal: ctl.signal }); } finally { clearTimeout(wd); }
+    let r; try { r = await A.sample.json(prompt, { purpose:'maggie-pagina', modelTier:'quick', cache:false, signal: ctl.signal }); } finally { clearTimeout(wd); }
     if (clean(r?.resumo, 1200)) C.doc.recap = clean(r.resumo, 1200);
     if (clean(r?.ondeParamos, 300)) C.doc.ondeParamos = clean(r.ondeParamos, 300);
     mergeChars(r?.personagens);
@@ -2905,7 +3022,7 @@ ${DIARY_SPEC}
 Responda só com JSON:
 {"resposta":"","opiniao":"resumo atualizado do que a leitora pensa sobre a história e os personagens, em até 70 palavras","diario":{"titulo":"","frase":"","texto":"","citacao":"","humor":""}}`;
   let r = null;
-  try { r = await A.sample.json(prompt, { modelTier:'default', cache:false }); } catch (e) { if (e?.code === 'not_granted') A.sample = null; }
+  try { r = await A.sample.json(prompt, { purpose:'maggie-conversa', modelTier:'default', cache:false }); } catch (e) { if (e?.code === 'not_granted') A.sample = null; }
   if (!C.awaiting) return;
   await finishReply(aw, ans, r);
 }
@@ -2978,7 +3095,7 @@ ${DIARY_SPEC}
 Responda só com JSON:
 {"resposta":"","opiniao":"resumo atualizado do que ela pensa, até 70 palavras","diario":{"titulo":"","frase":"","texto":"","citacao":"","humor":""}}`;
   let r = null;
-  try { r = await A.sample.json(prompt, { modelTier:'default', cache:false }); } catch (e) { if (e?.code === 'not_granted') A.sample = null; }
+  try { r = await A.sample.json(prompt, { purpose:'maggie-conversa', modelTier:'default', cache:false }); } catch (e) { if (e?.code === 'not_granted') A.sample = null; }
   if (C.awaiting !== aw) return;
   await finishReply(aw, q, r);
 }
@@ -2993,6 +3110,73 @@ function welcomeBack(){
   return `Oi, voltou! Da última vez: ${where}`;
 }
 
+/* ---- uso da IA (quanto vocês gastam da cota grátis do Gemini) ---- */
+// Limites aproximados do plano grátis (por modelo, por dia, somando as duas contas). O valor exato fica no Google AI Studio.
+const USAGE_LIMITS = [
+  { re:/tts/, label:'Voz natural da Maggie', rpd:null },
+  { re:/flash-lite/, label:'Flash-Lite (respostas rápidas)', rpd:500 },
+  { re:/flash/, label:'Flash (análises caprichadas)', rpd:20 },
+  { re:/gemma/, label:'Gemma (reserva)', rpd:14400 },
+];
+const PURPOSE_LABEL = { 'vozes-plano':'Preparar o elenco dos capítulos', 'vozes-falas':'Separar as falas dos personagens', 'vozes-escolha':'Escolher vozes', comando:'Comandos de voz', grifo:'Achar trecho para grifar', 'maggie-memoria':'Memória da Maggie', 'maggie-pagina':'Maggie acompanhando as páginas', 'maggie-conversa':'Conversas com a Maggie', 'revisao-comando':'Correção do microfone', 'revisao-resposta':'Correção do microfone', maggie:'Voz natural da Maggie', quick:'Outros', default:'Outros', deep:'Outros', text:'Outros', tts:'Voz natural da Maggie' };
+const modelInfo = m => USAGE_LIMITS.find(x => x.re.test(m || '')) || { label: m || '?', rpd:null };
+function ptResetLocal(){
+  // meia-noite do Pacífico (quando o Google zera a contagem diária) no horário de quem está vendo
+  try {
+    const now = new Date();
+    const pt = new Date(now.toLocaleString('en-US', { timeZone:'America/Los_Angeles' }));
+    const diff = now - pt; const mid = new Date(pt); mid.setHours(24, 0, 0, 0);
+    return new Date(mid.getTime() + diff).toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' });
+  } catch { return '05:00'; }
+}
+async function openUsage(){
+  $('#usage').hidden = false;
+  const body = $('#us-body');
+  body.innerHTML = '<h2>Uso da IA</h2><p class="fine">Carregando…</p>';
+  if (!A.sample?.usage){ body.innerHTML = '<h2>Uso da IA</h2><p class="fine">Indisponível agora.</p>'; return; }
+  let rows = [], mine = [];
+  try { [rows, mine] = await Promise.all([A.sample.usage(7), A.sample.usageMine(7).catch(() => [])]); }
+  catch { body.innerHTML = '<h2>Uso da IA</h2><p class="fine">Não consegui carregar agora.</p>'; return; }
+  const today = new Date(new Date().toLocaleString('en-US', { timeZone:'America/Los_Angeles' })).toLocaleDateString('en-CA');
+  const T = rows.filter(r => String(r.day) === today);
+  const byModel = {};
+  for (const r of T){ const k = r.model || '?'; const o = byModel[k] || (byModel[k] = { calls:0, limited:0, mine:0, chars:0 }); o.calls += r.calls; o.limited += r.limited; if (r.mine) o.mine += r.calls; o.chars += +r.chars || 0; }
+  const tot = T.reduce((a, r) => a + r.calls, 0), totMine = T.filter(r => r.mine).reduce((a, r) => a + r.calls, 0);
+  const tts = T.filter(r => r.kind === 'tts'), ttsN = tts.reduce((a, r) => a + r.calls - r.fails, 0), ttsChars = tts.reduce((a, r) => a + (+r.chars || 0), 0);
+  const hit = T.reduce((a, r) => a + r.limited, 0);
+  const models = Object.entries(byModel).sort((a, b) => b[1].calls - a[1].calls).map(([m, o]) => {
+    const info = modelInfo(m), pct = info.rpd ? Math.min(100, Math.round(o.calls / info.rpd * 100)) : null;
+    return `<div class="us-row"><b>${esc(info.label)}</b><span class="n">${o.calls}${info.rpd ? ' de ~' + info.rpd : ''}${o.limited ? ` · ${o.limited} no limite` : ''}</span>
+      <span class="fine" style="grid-column:1/-1;margin:0">${esc(m)}${o.mine !== o.calls ? ` · você ${o.mine}, a outra conta ${o.calls - o.mine}` : ''}</span>
+      ${pct != null ? `<div class="us-bar"><i class="${pct >= 80 ? 'hot' : ''}" style="width:${Math.max(2, pct)}%"></i></div>` : ''}</div>`;
+  }).join('') || '<p class="fine">Nenhum pedido hoje ainda.</p>';
+  // últimos 7 dias
+  const days = [];
+  for (let i = 6; i >= 0; i--){ const d = new Date(new Date(today + 'T12:00:00').getTime() - i * 864e5).toLocaleDateString('en-CA'); const R = rows.filter(r => String(r.day) === d); days.push({ d, text: R.filter(r => r.kind !== 'tts').reduce((a, r) => a + r.calls, 0), voz: R.filter(r => r.kind === 'tts').reduce((a, r) => a + r.calls, 0) }); }
+  const mx = Math.max(1, ...days.map(x => x.text + x.voz));
+  const dayBars = days.map(x => `<div title="${x.text} pedidos de texto, ${x.voz} falas"><span class="v" style="height:${x.voz / mx * 70}px"></span><span style="height:${x.text / mx * 70}px;border-radius:${x.voz ? 0 : '4px 4px 0 0'}"></span>${new Date(x.d + 'T12:00:00').toLocaleDateString('pt-BR', { weekday:'short' }).replace('.', '')}</div>`).join('');
+  // o que mais gasta (seus pedidos)
+  const byP = {};
+  for (const r of mine){ const l = PURPOSE_LABEL[r.purpose] || 'Outros'; byP[l] = (byP[l] || 0) + 1; }
+  const plist = Object.entries(byP).sort((a, b) => b[1] - a[1]).map(([l, n]) => `<li><span>${esc(l)}</span><span>${n}</span></li>`).join('');
+  const tokIn = mine.reduce((a, r) => a + (r.in_tok || 0), 0), tokOut = mine.reduce((a, r) => a + (r.out_tok || 0), 0);
+  const fmt = n => n >= 1e6 ? (n / 1e6).toFixed(1).replace('.', ',') + ' mi' : n >= 1e3 ? Math.round(n / 1e3) + ' mil' : String(n);
+  body.innerHTML = `<h2>Uso da IA</h2>
+    <p class="fine">Tudo é grátis: o Google dá uma cota por dia para cada modelo, dividida entre as duas contas. A contagem zera às ${ptResetLocal()} (meia-noite na Califórnia).</p>
+    <h3>Hoje</h3>
+    <p style="margin:4px 0 0">${tot} pedidos à IA${tot ? ` (você ${totMine}${tot - totMine ? `, a outra conta ${tot - totMine}` : ''})` : ''} · ${ttsN} falas com a voz natural${ttsChars ? ` (~${fmt(ttsChars)} letras)` : ''}.</p>
+    ${hit ? `<p class="fine" style="color:#C4483E">Hoje ${hit === 1 ? 'uma vez' : hit + ' vezes'} um modelo chegou no limite e a Maggie passou para o próximo da fila.</p>` : '<p class="fine">Nenhum limite atingido hoje.</p>'}
+    ${models}
+    <h3>Últimos 7 dias</h3>
+    <div class="us-days">${dayBars}</div>
+    <p class="fine">Escuro: pedidos de texto. Claro: falas com a voz natural.</p>
+    ${plist ? `<h3>O que mais gasta (seus pedidos, 7 dias)</h3><ul class="us-list">${plist}</ul>
+    <p class="fine">Seus pedidos usaram ~${fmt(tokIn)} tokens de leitura e ~${fmt(tokOut)} de resposta.</p>` : ''}
+    <p class="fine" style="margin-top:16px">Os limites são aproximados. Os números exatos da sua chave aparecem no Google AI Studio, em “Rate limit”.</p>`;
+}
+$('#us-x').onclick = () => { $('#usage').hidden = true; };
+$('#usage').onclick = e => { if (e.target.id === 'usage') $('#usage').hidden = true; };
+
 /* ---- menu ---- */
 const cmenu = $('#comp-menu');
 function renderCompMenu(){
@@ -3003,6 +3187,11 @@ function renderCompMenu(){
     <p class="cm-note">${read ? (on ? 'Quando você vira a página num momento marcante, ela puxa conversa. Ela só conhece as páginas que você já terminou.' : 'Ligue para a Maggie conversar com você enquanto lê.') : (on ? 'Ela aprende com você: se você pula muito, fala menos; se responde bastante, conversa mais.' : 'Ligue para a Maggie puxar conversa nos momentos marcantes.')}</p>
     <div class="lbl" style="margin-top:12px">Voz da Maggie</div>
     <div class="cm-opts"><button class="chip" data-mv="on" aria-pressed="${store.get('maggie.tts', true)}">Natural</button><button class="chip" data-mv="off" aria-pressed="${!store.get('maggie.tts', true)}">Do navegador</button></div>
+    <div class="lbl" style="margin-top:12px">Microfone: esperar você terminar</div>
+    <div class="cm-opts">${[1.5, 2.5, 4, 6].map(x => `<button class="chip" data-mwait="${x}" aria-pressed="${micWait() === x * 1000}">${String(x).replace('.', ',')} s</button>`).join('')}</div>
+    <div class="cm-opts" style="margin-top:6px"><button class="chip" data-mfix="on" aria-pressed="${micFixOn()}">Corrigir o que ouviu</button><button class="chip" data-mfix="off" aria-pressed="${!micFixOn()}">Usar como ouviu</button></div>
+    <p class="cm-note">Ela só age depois desse tempo em silêncio. A correção usa o livro para acertar nomes e palavras trocadas.</p>
+    <button class="chip cm-usage" data-usage="1" style="margin-top:8px">Uso da IA</button>
     ${read ? '<button class="chip cm-talk" data-cm="talk">Conversar agora</button>' : ''}`;
 }
 $('#ab-comp').onclick = e => {
@@ -3014,6 +3203,11 @@ $('#ab-comp').onclick = e => {
 };
 cmenu.addEventListener('click', async e => {
   e.stopPropagation();
+  const mw = e.target.closest('[data-mwait]');
+  if (mw){ store.set('mic.wait', +mw.dataset.mwait); renderCompMenu(); toast(`Vou esperar ${mw.textContent} de silêncio antes de agir.`); return; }
+  const mf = e.target.closest('[data-mfix]');
+  if (mf){ store.set('mic.fix', mf.dataset.mfix === 'on'); renderCompMenu(); return; }
+  if (e.target.closest('[data-usage]')){ cmenu.hidden = true; openUsage(); return; }
   const mv = e.target.closest('[data-mv]');
   if (mv){ const on = mv.dataset.mv === 'on'; store.set('maggie.tts', on); MV.offUntil = 0; renderCompMenu(); say(on ? 'Oi! Essa é a minha voz de verdade.' : 'Tudo bem, vou usar a voz do navegador.'); return; }
   const b = e.target.closest('[data-cm]'); if (!b) return;
@@ -3344,7 +3538,10 @@ function vcReset(){ clearTimeout(V.timer); V.pending = null; V.hold = false; V.w
 // Estados: 'wake' (esperando "Ei, Maggie"), 'command' (ouvindo o pedido), 'answer' (resposta à Maggie).
 // Enquanto a Maggie fala, o microfone pausa para não ouvir a si mesmo.
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-const MIC = { on:false, rec:null, state:'off', running:false, backoff:300, cmdUntil:0, restartT:null, cmdT:null, paused:false };
+const MIC = { on:false, rec:null, state:'off', running:false, backoff:300, cmdUntil:0, restartT:null, cmdT:null, paused:false,
+  base:0, len:0, cap:false, fromWake:false, carry:'', cur:'', silT:null };
+// Quanto silêncio esperar antes de agir (ela pode falar frases longas, com pausas para pensar)
+const micWait = () => Math.round(Math.min(8, Math.max(1, +store.get('mic.wait', 2.5) || 2.5)) * 1000);
 const WAKE_HEAR = /\b(?:ei|hey|oi|ola|olá)?[,\s]*(?:maggie|magg?ie|mag+i|magui|maguie|magie|meg+ie|meg+i|megui|mégui|meg)\b/i;
 const micWanted = () => MIC.on && !MIC.paused && !rd.hidden && document.visibilityState === 'visible';
 function micMode(){ return (C.awaiting || V.pending) ? 'answer' : (Date.now() < MIC.cmdUntil ? 'command' : 'wake'); }
@@ -3357,8 +3554,14 @@ function micPaint(){
 }
 function makeRec(){
   const r = new SR(); r.lang = 'pt-BR'; r.continuous = true; r.interimResults = true; r.maxAlternatives = 1;
-  r.onstart = () => { MIC.running = true; MIC.backoff = 300; micPaint(); };
-  r.onresult = e => { for (let i = e.resultIndex; i < e.results.length; i++){ const res = e.results[i]; micHeard(res[0].transcript.trim(), res.isFinal); } };
+  // Cada sessão do reconhecimento começa do zero; o que ela já tinha dito continua guardado em MIC.carry
+  r.onstart = () => { MIC.running = true; MIC.backoff = 300; MIC.base = 0; MIC.len = 0; if (MIC.cap){ MIC.carry = MIC.cur; } micPaint(); };
+  r.onresult = e => {
+    MIC.len = e.results.length;
+    const parts = []; let allFinal = true;
+    for (let i = MIC.base; i < e.results.length; i++){ parts.push(e.results[i][0].transcript); if (!e.results[i].isFinal) allFinal = false; }
+    micHeard(parts.join(' ').replace(/\s+/g, ' ').trim(), allFinal);
+  };
   r.onerror = e => {
     if (e.error === 'not-allowed' || e.error === 'service-not-allowed'){ MIC.on = false; micPaint(); toast('Sem permissão para o microfone. Libere o microfone para este site no navegador.'); }
     else if (e.error === 'network' || e.error === 'audio-capture') MIC.backoff = Math.min(8000, MIC.backoff * 2);
@@ -3373,31 +3576,45 @@ function micStart(){
   micPaint();
 }
 function micStop(){ clearTimeout(MIC.restartT); if (MIC.rec && MIC.running){ try { MIC.rec.abort(); } catch {} } MIC.running = false; micPaint(); }
-function micPause(){ if (MIC.on) micStop(); }
+function micPause(){ clearTimeout(MIC.silT); MIC.cap = false; MIC.cur = ''; MIC.carry = ''; if (MIC.on) micStop(); }
 function micResume(){ if (MIC.on){ clearTimeout(MIC.restartT); MIC.restartT = setTimeout(micStart, 350); } }
-function micHeard(t, final){
+function micHeard(t, allFinal){
   if (V.speaking || !t || !micWanted()) return;
-  const mode = micMode();
-  if (mode === 'wake'){
-    const m = t.match(WAKE_HEAR); if (!m) return;               // o livro tocando não dispara nada: só a palavra de ativação
-    if (!V.hold) holdForCommand();
-    if (!A.on) showReadBar();
-    const rest = t.slice(m.index + m[0].length).replace(/^[\s,.!?:]+/, '');
-    vc.value = rest;
-    if (final){
-      if (rest.length > 2) micSend(t);
-      else { MIC.cmdUntil = Date.now() + 9000; vcMsg('Pode falar…'); micPaint(); armCmdTimeout(); }
-    }
-    return;
+  if (!MIC.cap){
+    const mode = micMode();
+    if (mode === 'wake'){
+      const m = t.match(WAKE_HEAR);
+      if (!m){ if (allFinal) MIC.base = MIC.len; return; }          // o livro tocando não dispara nada: só a palavra de ativação
+      if (!V.hold) holdForCommand();
+      if (!A.on) showReadBar();
+      MIC.fromWake = true;
+    } else MIC.fromWake = false;
+    MIC.cap = true; MIC.carry = ''; clearTimeout(MIC.cmdT);
+    vcMsg('Ouvindo… pode falar com calma', 15000);
   }
-  vc.value = t.replace(WAKE_HEAR, '').replace(/^[\s,.!?:]+/, '');
-  if (final && t.length > 1) micSend(t);
+  let said = t;
+  if (MIC.fromWake && !MIC.carry){ const m = t.match(WAKE_HEAR); if (m) said = t.slice(m.index + m[0].length); }
+  said = said.replace(/^[\s,.!?:]+/, '');
+  MIC.cur = (MIC.carry ? MIC.carry + ' ' : '') + said;
+  vc.value = MIC.cur;
+  // Só age depois que ela termina: cada palavra nova reinicia a espera pelo silêncio
+  clearTimeout(MIC.silT);
+  MIC.silT = setTimeout(micFlush, micWait());
+}
+function micFlush(){
+  clearTimeout(MIC.silT);
+  if (!MIC.cap) return;
+  const t = MIC.cur.trim(), wake = MIC.fromWake;
+  MIC.cap = false; MIC.cur = ''; MIC.carry = ''; MIC.base = MIC.len;
+  if (V.speaking) return;
+  if (wake && t.length <= 2){ MIC.cmdUntil = Date.now() + 12000; vc.value = ''; vcMsg('Pode falar…'); micPaint(); armCmdTimeout(); return; }
+  if (t.length > 1) micSend(t);
 }
 function armCmdTimeout(){
   clearTimeout(MIC.cmdT);
-  MIC.cmdT = setTimeout(() => { if (micMode() === 'wake' && V.hold && !V.busy && !C.awaiting && !V.pending){ vc.value = ''; releaseHold(true); hideReadBar(); micPaint(); } }, 9500);
+  MIC.cmdT = setTimeout(() => { if (!MIC.cap && micMode() === 'wake' && V.hold && !V.busy && !C.awaiting && !V.pending){ vc.value = ''; releaseHold(true); hideReadBar(); micPaint(); } }, 12500);
 }
-function micSend(t){ MIC.cmdUntil = 0; clearTimeout(MIC.cmdT); vc.value = ''; micPaint(); runCommand(t); }
+function micSend(t){ MIC.cmdUntil = 0; clearTimeout(MIC.cmdT); vc.value = ''; micPaint(); runCommand(t, { voice:true }); }
 function micToggle(){
   if (!SR){ toast('Este navegador não reconhece voz. Use o Chrome ou o Edge.'); return; }
   MIC.on = !MIC.on; MIC.paused = false;

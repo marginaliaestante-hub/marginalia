@@ -347,7 +347,7 @@
         r = await fetch(`${CFG.url}/functions/v1/ai`, {
           method: 'POST',
           headers: { Authorization: 'Bearer ' + tok, apikey: CFG.key, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt: String(prompt), tier }),
+          body: JSON.stringify({ prompt: String(prompt), tier, purpose: opts.purpose || undefined }),
           signal: ctl.signal
         });
         j = await r.json().catch(() => ({}));
@@ -378,7 +378,7 @@
         r = await fetch(`${CFG.url}/functions/v1/ai`, {
           method: 'POST', signal: ctl.signal,
           headers: { Authorization: 'Bearer ' + tok, apikey: CFG.key, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tts: String(text), voice: opts.voice || 'Laomedeia' })
+          body: JSON.stringify({ tts: String(text), voice: opts.voice || 'Laomedeia', purpose: opts.purpose || undefined })
         });
         j = await r.json().catch(() => ({}));
       } catch (e) { clearTimeout(timer); const err = new Error('sem voz agora'); err.code = 'network'; throw err; }
@@ -392,6 +392,19 @@
       w(0, 'RIFF'); h.setUint32(4, 36 + bin.length, true); w(8, 'WAVE'); w(12, 'fmt '); h.setUint32(16, 16, true); h.setUint16(20, 1, true); h.setUint16(22, 1, true);
       h.setUint32(24, rate, true); h.setUint32(28, rate * 2, true); h.setUint16(32, 2, true); h.setUint16(34, 16, true); w(36, 'data'); h.setUint32(40, bin.length, true);
       return new Blob([h.buffer, bin], { type: 'audio/wav' });
+    },
+    // Uso da IA nos últimos dias (projeto inteiro: as duas contas dividem a mesma cota do Gemini)
+    async usage(days = 7) {
+      const { data, error } = await sb.rpc('ai_usage_summary', { p_days: days });
+      if (error) { const err = new Error(error.message); err.code = 'usage'; throw err; }
+      return data || [];
+    },
+    // Seus próprios pedidos (para ver o que mais gasta)
+    async usageMine(days = 7) {
+      const since = new Date(Date.now() - days * 864e5).toISOString();
+      const { data, error } = await sb.from('ai_usage').select('at,kind,purpose,model,ok,status,in_tok,out_tok,chars').gte('at', since).order('at', { ascending: false }).limit(5000);
+      if (error) { const err = new Error(error.message); err.code = 'usage'; throw err; }
+      return data || [];
     }
   };
 
